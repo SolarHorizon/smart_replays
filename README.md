@@ -1,11 +1,11 @@
 <div align="center">
-<h1 style="text-align: center; font-size: 50px">OBS Smart Replays</h1>
+<h1 style="text-align: center; font-size: 50px">Smart Replays</h1>
 </div>
 
-OBS Smart Replays is a python OBS script whose main purpose is to save clips with different names and to separate folders depending on the application being recorded (imitating NVIDIA Shadow Play functionality).
+Smart Replays is an OBS script whose main purpose is to save clips with different names and to separate folders depending on the application being recorded (imitating NVIDIA Shadow Play functionality).
 This script also has additional functionality, such as sound and pop-up notifications, auto-restart of the replay buffer, etc.
 
-![overview](https://github.com/user-attachments/assets/3fee87e1-5dcb-475b-a7a6-d85304b842ee)
+![overview](https://github.com/user-attachments/assets/82c8e163-ae2a-4ace-90ca-f4c052aa67e3)
 
 <div align="center">
 <p style="text-align: center; font-size: 30px"><b>⭐ Like this script? ⭐</b></p>
@@ -43,7 +43,7 @@ OS: Windows 10 or higher
 Python 3.10 or higher
 The script does not require any third-party libraries, however, Python must be installed together with `Tkinter`.
 
-![image](https://github.com/user-attachments/assets/d458df44-bb39-4e4b-8464-f25a61587ed4)
+![python_installing](https://github.com/user-attachments/assets/1d798ed9-2284-4759-9180-e7486012e1e7)
 
 <hr />
 
@@ -51,21 +51,21 @@ The script does not require any third-party libraries, however, Python must be i
 ## Clip naming and saving
 The main purpose of the script is to automatically change clip names depending on the recorded window, as well as to sort clips into folders.
 
-![different_folders](https://github.com/user-attachments/assets/c1011df3-19b4-47b5-b49d-2fb752796535)
-![names](https://github.com/user-attachments/assets/6375ed30-e4c1-4822-a0e9-870a9e9d9a6e)
+![different_folders](https://github.com/user-attachments/assets/b5db2e73-d717-4379-87d5-c1ca0ee83587)
+![names](https://github.com/user-attachments/assets/355a0772-bdd0-42ac-975f-95d252dafa0c)
 
 There are 3 modes of clip title naming:
 * by the name of an active app (.exe file name) at the moment of clip saving
 * by the name of an app (.exe file name) that was active most of the time during the clip recording
 * by the name of the current OBS scene
 
-![different_modes](https://github.com/user-attachments/assets/c5c05a0e-9c22-4b00-8a73-fb68a207672b)
+![different_modes](https://github.com/user-attachments/assets/b0755804-ccdf-424b-99b7-991d82364b3f)
 
 ## Hotkeys
 You can register any hotkeys for any of the modes.
 Pressing the hotkeys will save the clip in the corresponding mode without changing the mode globally.
 
-![hotkeys](https://github.com/user-attachments/assets/5969e442-5b48-44e3-9542-156d22dee0df)
+![hotkeys](https://github.com/user-attachments/assets/0eee6b68-f1c3-4fd8-8acd-19ec5b5b7c48)
 
 
 ## Clip filename template
@@ -99,21 +99,21 @@ However, if you record _Deadlock_ game (more precisely, the application located 
 
 The script provides the ability to import and export a list of custom names.
 
-![custom_names_list](https://github.com/user-attachments/assets/8df8adc8-f951-46d5-86c1-49f8bbc8784f)
+![custom_names_list](https://github.com/user-attachments/assets/03879677-4e50-4d44-a680-0c7448c05c12)
 
 
 ## Sound notifications
 You can set custom `.wav` sounds on successful and unsuccessful clip saves.
 
-![sound_notifications](https://github.com/user-attachments/assets/90cb8ea0-8382-43c5-b19d-fcf4baddba44)
+![sound_notifications](https://github.com/user-attachments/assets/d6fdb925-58ab-4453-9c80-9b30957d7e79)
 
 
 ## Pop-up notifications
 You can enable pop-up notifications, which are the same as Nvidia Shadow Play (or not ._.)
 
-![popup_success](https://github.com/user-attachments/assets/79dc8396-a2fa-4503-9dd8-e51b0379783f)
+![popup_success](https://github.com/user-attachments/assets/0a4cc1bb-4780-4c86-918a-efeaf2b023f5)
 
-![popup_failure](https://github.com/user-attachments/assets/061cd504-695d-4028-a630-5a5b27666afb)
+![popup_failure](https://github.com/user-attachments/assets/7a774432-ac16-4ee8-bfd9-9f402675168a)
 
 
 ## Cyclic buffer restarting
