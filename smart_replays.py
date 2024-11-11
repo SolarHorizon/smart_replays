@@ -613,7 +613,7 @@ If you want to disable scheduled restart of replay buffering, set the value to 0
 
 # OBS properties menu callbacks
 def open_github_callback(*args):
-    webbrowser.open("https://github.com/qvvonk/obs_smart_replays", 1)
+    webbrowser.open("https://github.com/qvvonk/smart_replays", 1)
 
 def update_custom_names_callback(p, prop, data):
     """
