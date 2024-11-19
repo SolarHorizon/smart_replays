@@ -615,6 +615,7 @@ If you want to disable scheduled restart of replay buffering, set the value to 0
 def open_github_callback(*args):
     webbrowser.open("https://github.com/qvvonk/smart_replays", 1)
 
+
 def update_custom_names_callback(p, prop, data):
     """
     Checks the list of custom names and updates custom names menu (shows / hides error texts).
@@ -709,8 +710,10 @@ def check_base_path_callback(p, prop, data):
     """
     warn_text = obs.obs_properties_get(p, PN.TEXT_BASE_PATH_INFO)
 
-    obs_records_path = Path(get_obs_config("SimpleOutput", "FilePath"))
+    obs_records_path = Path(get_base_path(from_obs_config=True))
+    print(obs_records_path)
     curr_path = Path(obs.obs_data_get_string(data, PN.PROP_BASE_PATH))
+    print(curr_path)
 
     if not len(curr_path.parts) or obs_records_path.parts[0] == curr_path.parts[0]:
         obs.obs_property_text_set_info_type(warn_text, obs.OBS_TEXT_INFO_WARNING)
@@ -740,6 +743,7 @@ def import_custom_names(*args):
 
     obs.obs_data_set_array(script_settings, PN.PROP_CUSTOM_NAMES_LIST, arr)
     return True
+
 
 def export_custom_names(*args):
     path = obs.obs_data_get_string(script_settings, PN.PROP_CUSTOM_NAMES_EXPORT_PATH)
@@ -870,12 +874,28 @@ def get_current_scene_name() -> str:
     return name
 
 
-def get_base_path() -> str:
+def get_base_path(from_obs_config: bool = False) -> str:
     """
     Gets current base path for clips.
     """
-    return obs.obs_data_get_string(script_settings, PN.PROP_BASE_PATH) or \
-        get_obs_config("SimpleOutput", "FilePath")
+    if not from_obs_config:
+        script_path = obs.obs_data_get_string(script_settings, PN.PROP_BASE_PATH)
+        if script_path:
+            return script_path
+
+    config_mode = get_obs_config("Output", "Mode")
+    if config_mode == "Simple":
+        return get_obs_config("SimpleOutput", "FilePath")
+    else:
+        return get_obs_config("AdvOut", "RecFilePath")
+
+
+def get_replay_buffer_max_time() -> int:
+    config_mode = get_obs_config("Output", "Mode")
+    if config_mode == "Simple":
+        return get_obs_config("SimpleOutput", "RecRBTime", value_type=int)
+    else:
+        return get_obs_config("AdvOut", "RecRBTime", value_type=int)
 
 
 # Script helper functions
@@ -1099,7 +1119,7 @@ def restart_replay_buffering_callback():
     _print("Restart replay buffering callback.")
     obs.timer_remove(restart_replay_buffering_callback)
 
-    replay_length = get_obs_config("SimpleOutput", "RecRBTime", value_type=int)
+    replay_length = get_replay_buffer_max_time()
     last_input_time = get_time_since_last_input()
     if last_input_time < replay_length:
         next_call = int((replay_length - last_input_time) * 1000)
@@ -1161,7 +1181,7 @@ def on_buffer_recording_started_callback(event):
         return
 
     global exe_history
-    replay_max_size = get_obs_config("SimpleOutput", "RecRBTime", value_type=int)
+    replay_max_size = get_replay_buffer_max_time()
     exe_history = deque([], maxlen=replay_max_size)
     _print(f"Exe history deque created. Maxlen={exe_history.maxlen}.")
     obs.timer_add(append_exe_history, 1000)
