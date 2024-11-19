@@ -173,7 +173,7 @@ if __name__ == '__main__':
 
 
 # ------------- OBS Script ----------------
-VERSION = "1.0.0"
+VERSION = "1.0.1"
 FORCE_MODE_LOCK = Lock()
 NAME_PROHIBITED_CHARS = r'/\:"<>*?|%'
 PATH_PROHIBITED_CHARS = r'"<>*?|%'
