@@ -33,22 +33,24 @@ import tkinter as tk
 from tkinter import font as f
 
 if __name__ != '__main__':
-    import obspython as obs
+    import obspython as obs  # don't import obspython if script launched, and not imported by OBS.
 
 
-# UI
-# This part of the script calls only when it is run as a main program, not imported by OBS.
+# This part of the script uses only when it is run as a main program, not imported by OBS.
+#
+# You can run this script to show notification:
+# python smart_replays.py <Notification Title> <Notification Text> <Notification Color>
 class ScrollingText:
     def __init__(self, canvas: tk.Canvas, text, visible_area_width, start_pos, font, speed=1):
         """
         Scrolling text widget.
 
-        :param canvas: canvas
-        :param text: text
-        :param visible_area_width: width of the visible area of the text
-        :param start_pos: text's start position (most likely padding from left border)
-        :param font: font
-        :param speed: scrolling speed
+        :param canvas: canvas.
+        :param text: text.
+        :param visible_area_width: width of the visible area of the text.
+        :param start_pos: text's start position (most likely padding from left border).
+        :param font: font.
+        :param speed: scrolling speed.
         """
 
         self.canvas = canvas
@@ -63,14 +65,14 @@ class ScrollingText:
         self.text_id = self.canvas.create_text(0, round((self.canvas.winfo_height() - self.text_height) / 2),
                                                anchor='nw', text=self.text, font=self.font, fill="#ffffff")
         self.text_curr_pos = start_pos
-        self.canvas.after(1000, self.update_scroll)
+        self.canvas.after(1000, self.update_scroll)  # type: ignore
 
     def update_scroll(self):
         if self.text_curr_pos + self.text_width > self.area_width:
             self.canvas.move(self.text_id, -self.speed, 0)
             self.text_curr_pos -= self.speed
 
-            self.canvas.after(20, self.update_scroll)
+            self.canvas.after(20, self.update_scroll)  # type: ignore
 
 
 class NotificationWindow:
@@ -152,7 +154,7 @@ class NotificationWindow:
         self.animate_window(self.scr_w, self.wnd_x)
         time.sleep(0.1)
         self.animate_main_frame(self.main_frm_x, self.main_frm_padding)
-        self.window.after(5000, self.close)
+        self.window.after(5000, self.close)  # type: ignore
         self.root.mainloop()
 
     def close(self):
@@ -169,13 +171,12 @@ if __name__ == '__main__':
     color = sys.argv[3] if len(sys.argv) > 3 else "#76B900"
     NotificationWindow(t, m, color).show()
     sys.exit(0)
-# ------------- END OF SCRIPT -------------
 
 
 # ------------- OBS Script ----------------
-VERSION = "1.0.1"
+VERSION = "1.0.1"  # Script version
 FORCE_MODE_LOCK = Lock()
-NAME_PROHIBITED_CHARS = r'/\:"<>*?|%'
+FILENAME_PROHIBITED_CHARS = r'/\:"<>*?|%'
 PATH_PROHIBITED_CHARS = r'"<>*?|%'
 DEFAULT_FILENAME_FORMAT = "%NAME_%d.%m.%Y_%H-%M-%S"
 DEFAULT_CUSTOM_NAMES = [
@@ -623,7 +624,7 @@ def update_custom_names_callback(p, prop, data):
     :param p: properties.
     :param prop: updated property.
     :param data: config settings.
-    :return: True if settings window needs to be updated,  otherwise False.
+    :return: True if settings window needs to be updated, otherwise False.
     """
     invalid_format_err_text = obs.obs_properties_get(p, PN.TXT_CUSTOM_NAMES_INVALID_FORMAT)
     invalid_chars_err_text = obs.obs_properties_get(p, PN.TXT_CUSTOM_NAMES_INVALID_CHARACTERS)
@@ -645,16 +646,19 @@ def update_custom_names_callback(p, prop, data):
         obs.obs_property_set_visible(invalid_chars_err_text, True)
         obs.obs_property_set_visible(path_exists_err_text, False)
         index = e.index
+
     except CustomNameInvalidFormat as e:
         obs.obs_property_set_visible(invalid_format_err_text, True)
         obs.obs_property_set_visible(invalid_chars_err_text, False)
         obs.obs_property_set_visible(path_exists_err_text, False)
         index = e.index
+
     except CustomNamePathAlreadyExists as e:
         obs.obs_property_set_visible(invalid_format_err_text, False)
         obs.obs_property_set_visible(invalid_chars_err_text, False)
         obs.obs_property_set_visible(path_exists_err_text, True)
         index = e.index
+
     except CustomNameParsingError as e:
         index = e.index
 
@@ -711,9 +715,7 @@ def check_base_path_callback(p, prop, data):
     warn_text = obs.obs_properties_get(p, PN.TEXT_BASE_PATH_INFO)
 
     obs_records_path = Path(get_base_path(from_obs_config=True))
-    print(obs_records_path)
     curr_path = Path(obs.obs_data_get_string(data, PN.PROP_BASE_PATH))
-    print(curr_path)
 
     if not len(curr_path.parts) or obs_records_path.parts[0] == curr_path.parts[0]:
         obs.obs_property_text_set_info_type(warn_text, obs.OBS_TEXT_INFO_WARNING)
@@ -967,7 +969,7 @@ def load_custom_names(data_dict: dict):
             raise CustomNameInvalidFormat(index)
 
         path = os.path.expandvars(path)
-        if any(i in path for i in PATH_PROHIBITED_CHARS) or any(i in name for i in NAME_PROHIBITED_CHARS):
+        if any(i in path for i in PATH_PROHIBITED_CHARS) or any(i in name for i in FILENAME_PROHIBITED_CHARS):
             raise CustomNameInvalidCharacters(index)
 
         if Path(path) in new_custom_names.keys():
@@ -1093,7 +1095,7 @@ def format_filename(clip_name: str, dt: datetime | None = None,
         _print("Using default filename format.")
         return format_filename(clip_name, dt, force_default_template=True)
 
-    for i in NAME_PROHIBITED_CHARS:
+    for i in FILENAME_PROHIBITED_CHARS:
         if i in filename:
             if raise_exception:
                 raise SyntaxError
@@ -1293,6 +1295,7 @@ def sbfm2(pressed):
 
 def sbfm3(pressed):
     return save_buffer_force_mode(3) if pressed else None
+
 
 def load_hotkeys():
     hk1_id = obs.obs_hotkey_register_frontend(PN.HK_SAVE_BUFFER_MODE_1,

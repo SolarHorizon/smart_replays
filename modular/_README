@@ -1,0 +1,17 @@
+This modular version of the script is created solely for ease of development!
+
+Since OBS scripts are exclusively single-file, remember that all names are in the same namespace,
+so if their values were changed in one module, they are also changed for all other modules.
+
+Remember that the logic of this script implies that it is single-file!
+
+Use build_script.py to “build” the one-file script from the modular version.
+
+If you want to modify this variant of script, there are some tips:
+
+1. If you are importing something from script modules, use relative imports.
+    Example: `from .const import PN`
+
+2. If you are creating new global variable, create it in `globals.py`.
+
+3. If you are changing value of some variable from `globals.py` in another module, dont forget to use `global` statement.
