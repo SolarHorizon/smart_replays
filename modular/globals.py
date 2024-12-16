@@ -14,8 +14,6 @@
 
 import sys
 import ctypes
-from ctypes import wintypes
-from datetime import datetime
 from threading import Lock
 from pathlib import Path
 from collections import deque
@@ -83,15 +81,3 @@ class PropertiesNames:
     HK_SAVE_BUFFER_MODE_3 = "obssmartreplayshk3"
 
 PN = PropertiesNames
-
-
-class LASTINPUTINFO(ctypes.Structure):
-    _fields_ = [("cbSize", wintypes.UINT),
-                ("dwTime", wintypes.DWORD)]
-
-
-def _print(*values, sep: str | None = None, end: str | None = None, file=None, flush: bool = False):
-    time_ = datetime.now()
-    str_time = time_.strftime(f"%d.%m.%Y %H:%M:%S")
-    prefix = f"[{str_time}]"
-    print(prefix, *values, sep=sep, end=end, file=file, flush=flush)

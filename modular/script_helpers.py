@@ -12,8 +12,7 @@
 #  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 #  GNU Affero General Public License for more details.
 
-from .globals import (_print,
-                      script_settings,
+from .globals import (script_settings,
                       exe_history,
                       DEFAULT_CUSTOM_NAMES,
                       PATH_PROHIBITED_CHARS,
@@ -22,7 +21,7 @@ from .globals import (_print,
 
 from .exceptions import CustomNameInvalidFormat, CustomNameInvalidCharacters, CustomNamePathAlreadyExists
 from .obs_related import get_obs_config
-from .tech import play_sound, get_active_window_pid, get_executable_path
+from .tech import play_sound, _print
 
 from pathlib import Path
 import os

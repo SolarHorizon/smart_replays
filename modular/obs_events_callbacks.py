@@ -12,10 +12,11 @@
 #  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 #  GNU Affero General Public License for more details.
 
-from .globals import _print, exe_history, script_settings, PN, FORCE_MODE_LOCK
+from .globals import exe_history, script_settings, PN, FORCE_MODE_LOCK
+from .tech import _print
 from .obs_related import get_replay_buffer_max_time, restart_replay_buffering
-from .script_helpers import append_exe_history, notify
-from .other_callbacks import restart_replay_buffering_callback
+from .script_helpers import notify
+from .other_callbacks import restart_replay_buffering_callback, append_exe_history
 from .save_buffer import save_buffer
 
 import obspython as obs

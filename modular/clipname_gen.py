@@ -12,14 +12,13 @@
 #  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 #  GNU Affero General Public License for more details.
 
-from .globals import (_print,
-                      script_settings,
+from .globals import (script_settings,
                       exe_history,
                       custom_names,
                       DEFAULT_FILENAME_FORMAT,
                       FILENAME_PROHIBITED_CHARS, PN)
 
-from .tech import get_active_window_pid, get_executable_path
+from .tech import get_active_window_pid, get_executable_path, _print
 from .obs_related import get_current_scene_name
 
 import obspython as obs
@@ -29,12 +28,14 @@ import traceback
 import os
 
 
-def gen_clip_name(mode: int) -> str:
+def gen_clip_base_name(mode: int) -> str:
     """
-    Generates clip name based on script settings.
+    Generates clip base name based on clip naming mode.
     It's NOT generates new path for clip.
+
+    :param mode: Clip naming mode. If 0 - gets mode from script config.
     """
-    _print("Generating clip name...")
+    _print("Generating clip base name...")
     mode = obs.obs_data_get_int(script_settings, PN.PROP_FILENAME_CONDITION) if not mode else mode
 
     if mode in [1, 2]:
@@ -56,8 +57,8 @@ def gen_clip_name(mode: int) -> str:
             executable_path_obj = Path(executable_path)
 
 
-        if clip_name := get_name_from_custom_names(executable_path):
-            return clip_name
+        if custom_name := get_name_from_custom_names(executable_path):
+            return custom_name
         else:
             _print(f"{executable_path} or its parents weren't found in custom names list. "
                    f"Assigning the name of the executable: {executable_path_obj.stem}")
@@ -104,7 +105,9 @@ def format_filename(clip_name: str, dt: datetime | None = None,
     :param clip_name: clip name.
     :param dt: datetime obj.
     :param force_default_template: use the default template even if the template in the settings is valid.
+        This param uses only in this function (in recursive call) and only if something wrong with users template.
     :param raise_exception: raise exception if template is invalid instead of using default template.
+        This param uses when this function called from properties callback to check template imputed by user.
     """
     if dt is None:
         dt = datetime.now()
@@ -149,8 +152,7 @@ def add_duplicate_suffix(path: str | Path) -> Path:
     :param path: path to file.
     :return: updated path.
     """
-    if isinstance(path, Path):
-        path = str(path)
+    path = str(path)
 
     filename, ext = os.path.splitext(path)
     num = 1

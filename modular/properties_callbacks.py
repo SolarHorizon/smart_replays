@@ -29,6 +29,11 @@ import json
 import os
 
 
+# All UI callbacks have the same parameters:
+# p: properties object (controls the properties UI)
+# prop: property that changed
+# data: script settings
+# Usually I don't use `data`, cuz we have script_settings global variable.
 def open_github_callback(*args):
     webbrowser.open("https://github.com/qvvonk/smart_replays", 1)
 
@@ -36,11 +41,6 @@ def open_github_callback(*args):
 def update_custom_names_callback(p, prop, data):
     """
     Checks the list of custom names and updates custom names menu (shows / hides error texts).
-
-    :param p: properties.
-    :param prop: updated property.
-    :param data: config settings.
-    :return: True if settings window needs to be updated, otherwise False.
     """
     invalid_format_err_text = obs.obs_properties_get(p, PN.TXT_CUSTOM_NAMES_INVALID_FORMAT)
     invalid_chars_err_text = obs.obs_properties_get(p, PN.TXT_CUSTOM_NAMES_INVALID_CHARACTERS)
@@ -126,7 +126,7 @@ def update_notifications_menu_callback(p, prop, data):
 def check_base_path_callback(p, prop, data):
     """
     Checks base path is in the same disk as OBS recordings path.
-    If it's not - sets OBS records path as base path for clips.
+    If it's not - sets OBS records path as base path for clips and shows warning.
     """
     warn_text = obs.obs_properties_get(p, PN.TEXT_BASE_PATH_INFO)
 
@@ -141,7 +141,10 @@ def check_base_path_callback(p, prop, data):
     return True
 
 
-def import_custom_names(*args):
+def import_custom_names_from_json_callback(*args):
+    """
+    Imports custom names from JSON file.
+    """
     path = obs.obs_data_get_string(script_settings, PN.PROP_CUSTOM_NAMES_IMPORT_PATH)
     if not path or not os.path.exists(path) or not os.path.isfile(path):
         return False
@@ -163,7 +166,10 @@ def import_custom_names(*args):
     return True
 
 
-def export_custom_names(*args):
+def export_custom_names_to_json_callback(*args):
+    """
+    Exports custom names to JSON file.
+    """
     path = obs.obs_data_get_string(script_settings, PN.PROP_CUSTOM_NAMES_EXPORT_PATH)
     if not path or not os.path.exists(path) or not os.path.isdir(path):
         return False
@@ -171,5 +177,5 @@ def export_custom_names(*args):
     custom_names_dict = json.loads(obs.obs_data_get_last_json(script_settings))
     custom_names_dict = custom_names_dict.get(PN.PROP_CUSTOM_NAMES_LIST) or DEFAULT_CUSTOM_NAMES
 
-    with open(os.path.join(path, "obs_smartreplays_sutom_names.json"), "w") as f:
+    with open(os.path.join(path, "obs_smart_replays_custom_names.json"), "w") as f:
         f.write(json.dumps(custom_names_dict, ensure_ascii=False))

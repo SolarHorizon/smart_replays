@@ -14,7 +14,7 @@
 
 
 from .globals import PN, hotkey_ids, script_settings
-from .save_buffer import save_buffer_force_mode
+from .save_buffer import save_buffer_with_force_mode
 
 import obspython as obs
 
@@ -22,15 +22,15 @@ import obspython as obs
 def load_hotkeys():
     hk1_id = obs.obs_hotkey_register_frontend(PN.HK_SAVE_BUFFER_MODE_1,
                                               "[Smart Replays] Save buffer (force mode 1)",
-                                              lambda pressed: save_buffer_force_mode(1) if pressed else None)
+                                              lambda pressed: save_buffer_with_force_mode(1) if pressed else None)
 
     hk2_id = obs.obs_hotkey_register_frontend(PN.HK_SAVE_BUFFER_MODE_2,
                                               "[Smart Replays] Save buffer (force mode 2)",
-                                              lambda pressed: save_buffer_force_mode(2) if pressed else None)
+                                              lambda pressed: save_buffer_with_force_mode(2) if pressed else None)
 
     hk3_id = obs.obs_hotkey_register_frontend(PN.HK_SAVE_BUFFER_MODE_3,
                                               "[Smart Replays] Save buffer (force mode 3)",
-                                              lambda pressed: save_buffer_force_mode(3) if pressed else None)
+                                              lambda pressed: save_buffer_with_force_mode(3) if pressed else None)
 
     hotkey_ids.update({PN.HK_SAVE_BUFFER_MODE_1: hk1_id,
                        PN.HK_SAVE_BUFFER_MODE_2: hk2_id,

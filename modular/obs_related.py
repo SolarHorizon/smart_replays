@@ -12,7 +12,8 @@
 #  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 #  GNU Affero General Public License for more details.
 
-from .globals import script_settings, _print, PN
+from .globals import script_settings, PN
+from .tech import _print
 
 import obspython as obs
 import time
@@ -108,6 +109,9 @@ def get_replay_buffer_max_time() -> int:
 
 
 def restart_replay_buffering():
+    """
+    Restart replay buffering, obviously -_-
+    """
     _print("Stopping replay buffering...")
     replay_output = obs.obs_frontend_get_replay_buffer_output()
     obs.obs_frontend_replay_buffer_stop()

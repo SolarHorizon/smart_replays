@@ -13,9 +13,9 @@
 #  GNU Affero General Public License for more details.
 
 
-from .globals import _print, exe_history
+from .globals import exe_history
 from .obs_related import get_replay_buffer_max_time, restart_replay_buffering
-from .tech import get_time_since_last_input, get_active_window_pid, get_executable_path
+from .tech import get_time_since_last_input, get_active_window_pid, get_executable_path, _print
 
 import obspython as obs
 from threading import Thread
@@ -23,6 +23,11 @@ from pathlib import Path
 
 
 def restart_replay_buffering_callback():
+    """
+    Restarts replay buffering and adds itself to obs time.
+
+    This callback is only called by the obs timer.
+    """
     _print("Restart replay buffering callback.")
     obs.timer_remove(restart_replay_buffering_callback)
 
@@ -38,11 +43,15 @@ def restart_replay_buffering_callback():
 
     # IMPORTANT
     # I don't know why, but it seems like stopping and starting replay buffering should be in the separate thread.
-    # Otherwise it can "stuck" on stopping.
+    # Otherwise it can "stuck" at stopping state.
     Thread(target=restart_replay_buffering, daemon=True).start()
+    # I don't re-add this callback to timer again, cz it will be automatically added in on buffering start callback.
 
 
 def append_exe_history():
+    """
+    Adds current active executable name in exe history.
+    """
     pid = get_active_window_pid()
     try:
         exe = get_executable_path(pid)

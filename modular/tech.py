@@ -12,11 +12,24 @@
 #  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 #  GNU Affero General Public License for more details.
 
-from .globals import user32, LASTINPUTINFO
+from .globals import user32
 
 import ctypes
 from ctypes import wintypes
 import winsound
+from datetime import datetime
+
+
+class LASTINPUTINFO(ctypes.Structure):
+    _fields_ = [("cbSize", wintypes.UINT),
+                ("dwTime", wintypes.DWORD)]
+
+
+def _print(*values, sep: str | None = None, end: str | None = None, file=None, flush: bool = False):
+    time_ = datetime.now()
+    str_time = time_.strftime(f"%d.%m.%Y %H:%M:%S")
+    prefix = f"[{str_time}]"
+    print(prefix, *values, sep=sep, end=end, file=file, flush=flush)
 
 
 def get_active_window_pid() -> int | None:

@@ -12,9 +12,10 @@
 #  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 #  GNU Affero General Public License for more details.
 
-from .globals import _print, script_settings, FORCE_MODE_LOCK, PN
+from .globals import script_settings, FORCE_MODE_LOCK, PN
 from .obs_related import get_last_replay_file_name, get_base_path
-from .clipname_gen import gen_clip_name, format_filename, add_duplicate_suffix
+from .clipname_gen import gen_clip_base_name, format_filename, add_duplicate_suffix
+from .tech import _print
 
 from datetime import datetime
 from pathlib import Path
@@ -28,7 +29,7 @@ def save_buffer(mode: int = 0) -> tuple[str, Path]:
     old_file_path = get_last_replay_file_name()
     _print(f"Old clip file path: {old_file_path}")
 
-    clip_name = gen_clip_name(mode)
+    clip_name = gen_clip_base_name(mode)
     ext = old_file_path.split(".")[-1]
     filename = format_filename(clip_name, dt) + f".{ext}"
 
@@ -46,7 +47,11 @@ def save_buffer(mode: int = 0) -> tuple[str, Path]:
     return clip_name, new_path
 
 
-def save_buffer_force_mode(mode: int):
+def save_buffer_with_force_mode(mode: int):
+    """
+    Sends a request to save the replay buffer and setting a specific clip naming mode.
+    Can only be called using hotkeys.
+    """
     if not obs.obs_frontend_replay_buffer_active():
         return
 

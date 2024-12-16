@@ -12,13 +12,13 @@
 #  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 #  GNU Affero General Public License for more details.
 
-from .globals import (_print,
-                      hotkey_ids,
+from .globals import (hotkey_ids,
                       script_settings,
                       VERSION,
                       DEFAULT_FILENAME_FORMAT,
                       DEFAULT_CUSTOM_NAMES, PN)
 
+from .tech import _print
 from .obs_related import get_obs_config
 from .other_callbacks import restart_replay_buffering_callback, append_exe_history
 from .obs_events_callbacks import (on_buffer_save_callback,

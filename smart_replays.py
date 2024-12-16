@@ -1,4 +1,4 @@
-#  Smart Replays is an OBS script that allows more flexible replay buffer management:
+#  OBS Smart Replays is an OBS script that allows more flexible replay buffer management:
 #  set the clip name depending on the current window, set the file name format, etc.
 #  Copyright (C) 2024 qvvonk
 #
@@ -12,30 +12,29 @@
 #  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 #  GNU Affero General Public License for more details.
 
-from __future__ import annotations
-import os
-import sys
-import json
-import time
-import ctypes
-import pathlib
-import winsound
-import traceback
-import subprocess
-import webbrowser
-from pathlib import Path
-from ctypes import wintypes
-from datetime import datetime
-from collections import deque
-from threading import Lock, Thread
-
 import tkinter as tk
+import time
+import sys
+import ctypes
+import webbrowser
+import json
+import os
+import winsound
+import subprocess
+import traceback
 from tkinter import font as f
+from threading import Lock
+from threading import Thread
+from pathlib import Path
+from collections import deque
+from datetime import datetime
+from ctypes import wintypes
 
 if __name__ != '__main__':
-    import obspython as obs  # don't import obspython if script launched, and not imported by OBS.
+    import obspython as obs
 
 
+# -------------------- ui.py --------------------
 # This part of the script uses only when it is run as a main program, not imported by OBS.
 #
 # You can run this script to show notification:
@@ -173,7 +172,7 @@ if __name__ == '__main__':
     sys.exit(0)
 
 
-# ------------- OBS Script ----------------
+# -------------------- globals.py --------------------
 VERSION = "1.0.1"  # Script version
 FORCE_MODE_LOCK = Lock()
 FILENAME_PROHIBITED_CHARS = r'/\:"<>*?|%'
@@ -192,41 +191,6 @@ hotkey_ids: dict = {}
 force_mode = 0
 
 
-class LASTINPUTINFO(ctypes.Structure):
-    _fields_ = [("cbSize", wintypes.UINT),
-                ("dwTime", wintypes.DWORD)]
-
-
-def _print(*values, sep: str | None = None, end: str | None = None, file=None, flush: bool = False):
-    time_ = datetime.now()
-    str_time = time_.strftime(f"%d.%m.%Y %H:%M:%S")
-    prefix = f"[{str_time}]"
-    print(prefix, *values, sep=sep, end=end, file=file, flush=flush)
-
-
-# Exceptions
-class CustomNameParsingError(Exception):
-    def __init__(self, index):
-        super().__init__(Exception)
-        self.index = index
-
-
-class CustomNamePathAlreadyExists(CustomNameParsingError):
-    def __init__(self, index):
-        super().__init__(index)
-
-
-class CustomNameInvalidCharacters(CustomNameParsingError):
-    def __init__(self, index):
-        super().__init__(index)
-
-
-class CustomNameInvalidFormat(CustomNameParsingError):
-    def __init__(self, index):
-        super().__init__(index)
-
-
-# Properties names
 class PropertiesNames:
     GR_PATHS = "paths"
     GR_NOTIFICATIONS = "notifications"
@@ -273,6 +237,53 @@ class PropertiesNames:
 PN = PropertiesNames
 
 
+# -------------------- exceptions.py --------------------
+class CustomNameParsingError(Exception):
+    """
+    Base exception for all custom names related exceptions.
+    """
+    def __init__(self, index):
+        """
+        :param index: custom name index.
+        """
+        super().__init__(Exception)
+        self.index = index
+
+
+class CustomNamePathAlreadyExists(CustomNameParsingError):
+    """
+    Exception raised when a custom name is already exists.
+    """
+    def __init__(self, index):
+        """
+        :param index: custom name index.
+        """
+        super().__init__(index)
+
+
+class CustomNameInvalidCharacters(CustomNameParsingError):
+    """
+    Exception raised when a custom name has invalid characters.
+    """
+    def __init__(self, index):
+        """
+        :param index: custom name index.
+        """
+        super().__init__(index)
+
+
+class CustomNameInvalidFormat(CustomNameParsingError):
+    """
+    Exception raised when a custom name is invalid format.
+    """
+    def __init__(self, index):
+        """
+        :param index: custom name index.
+        """
+        super().__init__(index)
+
+
+# -------------------- properties.py --------------------
 def script_properties():
     p = obs.obs_properties_create()  # main p
     paths_props = obs.obs_properties_create()
@@ -559,7 +570,7 @@ Path cannot contain <code style="color: cyan">&lt; &gt; | * ? " %</code> charact
         custom_names_props,
         PN.BTN_CUSTOM_NAMES_IMPORT,
         "Import custom names",
-        import_custom_names,
+        import_custom_names_from_json_callback,
     )
 
     obs.obs_properties_add_path(
@@ -575,7 +586,7 @@ Path cannot contain <code style="color: cyan">&lt; &gt; | * ? " %</code> charact
         custom_names_props,
         PN.BTN_CUSTOM_NAMES_EXPORT,
         "Export custom names",
-        export_custom_names,
+        export_custom_names_to_json_callback,
     )
 
     # ------ Other ------
@@ -604,15 +615,20 @@ If you want to disable scheduled restart of replay buffering, set the value to 0
         description="Restart replay buffer after clip saving"
     )
 
-    obs.obs_property_set_modified_callback(base_path_prop, check_base_path_callback)
-    obs.obs_property_set_modified_callback(filename_format_prop, check_filename_template_callback)
-    obs.obs_property_set_modified_callback(notification_success_prop, update_notifications_menu_callback)
-    obs.obs_property_set_modified_callback(notification_failure_prop, update_notifications_menu_callback)
-    obs.obs_property_set_modified_callback(custom_names_list, update_custom_names_callback)
+    obs.obs_property_set_modified_callback(base_path_prop, check_base_path_callback)  # type: ignore
+    obs.obs_property_set_modified_callback(filename_format_prop, check_filename_template_callback)  # type: ignore
+    obs.obs_property_set_modified_callback(notification_success_prop, update_notifications_menu_callback)  # type: ignore
+    obs.obs_property_set_modified_callback(notification_failure_prop, update_notifications_menu_callback)  # type: ignore
+    obs.obs_property_set_modified_callback(custom_names_list, update_custom_names_callback)  # type: ignore
     return p
 
 
-# OBS properties menu callbacks
+# -------------------- properties_callbacks.py --------------------
+# All UI callbacks have the same parameters:
+# p: properties object (controls the properties UI)
+# prop: property that changed
+# data: script settings
+# Usually I don't use `data`, cuz we have script_settings global variable.
 def open_github_callback(*args):
     webbrowser.open("https://github.com/qvvonk/smart_replays", 1)
 
@@ -620,11 +636,6 @@ def open_github_callback(*args):
 def update_custom_names_callback(p, prop, data):
     """
     Checks the list of custom names and updates custom names menu (shows / hides error texts).
-
-    :param p: properties.
-    :param prop: updated property.
-    :param data: config settings.
-    :return: True if settings window needs to be updated, otherwise False.
     """
     invalid_format_err_text = obs.obs_properties_get(p, PN.TXT_CUSTOM_NAMES_INVALID_FORMAT)
     invalid_chars_err_text = obs.obs_properties_get(p, PN.TXT_CUSTOM_NAMES_INVALID_CHARACTERS)
@@ -710,7 +721,7 @@ def update_notifications_menu_callback(p, prop, data):
 def check_base_path_callback(p, prop, data):
     """
     Checks base path is in the same disk as OBS recordings path.
-    If it's not - sets OBS records path as base path for clips.
+    If it's not - sets OBS records path as base path for clips and shows warning.
     """
     warn_text = obs.obs_properties_get(p, PN.TEXT_BASE_PATH_INFO)
 
@@ -725,7 +736,10 @@ def check_base_path_callback(p, prop, data):
     return True
 
 
-def import_custom_names(*args):
+def import_custom_names_from_json_callback(*args):
+    """
+    Imports custom names from JSON file.
+    """
     path = obs.obs_data_get_string(script_settings, PN.PROP_CUSTOM_NAMES_IMPORT_PATH)
     if not path or not os.path.exists(path) or not os.path.isfile(path):
         return False
@@ -747,7 +761,10 @@ def import_custom_names(*args):
     return True
 
 
-def export_custom_names(*args):
+def export_custom_names_to_json_callback(*args):
+    """
+    Exports custom names to JSON file.
+    """
     path = obs.obs_data_get_string(script_settings, PN.PROP_CUSTOM_NAMES_EXPORT_PATH)
     if not path or not os.path.exists(path) or not os.path.isdir(path):
         return False
@@ -755,11 +772,23 @@ def export_custom_names(*args):
     custom_names_dict = json.loads(obs.obs_data_get_last_json(script_settings))
     custom_names_dict = custom_names_dict.get(PN.PROP_CUSTOM_NAMES_LIST) or DEFAULT_CUSTOM_NAMES
 
-    with open(os.path.join(path, "obs_smartreplays_sutom_names.json"), "w") as f:
+    with open(os.path.join(path, "obs_smart_replays_custom_names.json"), "w") as f:
         f.write(json.dumps(custom_names_dict, ensure_ascii=False))
 
 
-# Windows functions
+# -------------------- tech.py --------------------
+class LASTINPUTINFO(ctypes.Structure):
+    _fields_ = [("cbSize", wintypes.UINT),
+                ("dwTime", wintypes.DWORD)]
+
+
+def _print(*values, sep: str | None = None, end: str | None = None, file=None, flush: bool = False):
+    time_ = datetime.now()
+    str_time = time_.strftime(f"%d.%m.%Y %H:%M:%S")
+    prefix = f"[{str_time}]"
+    print(prefix, *values, sep=sep, end=end, file=file, flush=flush)
+
+
 def get_active_window_pid() -> int | None:
     """
     Gets process ID of the current active window.
@@ -819,7 +848,7 @@ def get_time_since_last_input() -> float:
         return 0
 
 
-# OBS related functions
+# -------------------- obs_related.py --------------------
 def get_obs_config(section_name: str | None = None,
                    param_name: str | None = None,
                    value_type: type[str, int, bool, float] = str,
@@ -836,7 +865,7 @@ def get_obs_config(section_name: str | None = None,
     """
     cfg = obs.obs_frontend_get_global_config() if global_config else obs.obs_frontend_get_profile_config()
 
-    if not section_name or not param_name:
+    if not (section_name and param_name):
         return cfg
 
     functions = {
@@ -847,20 +876,21 @@ def get_obs_config(section_name: str | None = None,
     }
 
     if value_type not in functions.keys():
-        raise ValueError("Unsupported type.")
+        raise ValueError(f'Can\'t get value of {param_name} from section {section_name}: '
+                         f'unsupported value type {value_type.__class__.__name__}')
 
     return functions[value_type](cfg, section_name, param_name)
 
 
 def get_last_replay_file_name() -> str:
     """
-    Gets the last saved buffer file name.
+    Returns the last saved buffer file name.
     """
     replay_buffer = obs.obs_frontend_get_replay_buffer_output()
     cd = obs.calldata_create()
     proc_handler = obs.obs_output_get_proc_handler(replay_buffer)
-    obs.proc_handler_call(proc_handler, "get_last_replay", cd)
-    path = obs.calldata_string(cd, "path")
+    obs.proc_handler_call(proc_handler, 'get_last_replay', cd)
+    path = obs.calldata_string(cd, 'path')
     obs.calldata_destroy(cd)
     obs.obs_output_release(replay_buffer)
     return path
@@ -868,7 +898,7 @@ def get_last_replay_file_name() -> str:
 
 def get_current_scene_name() -> str:
     """
-    Gets the current OBS scene name.
+    Returns the current OBS scene name.
     """
     current_scene = obs.obs_frontend_get_current_scene()
     name = obs.obs_source_get_name(current_scene)
@@ -878,10 +908,15 @@ def get_current_scene_name() -> str:
 
 def get_base_path(from_obs_config: bool = False) -> str:
     """
-    Gets current base path for clips.
+    Returns current base path for clips.
+
+    :param from_obs_config: If True, returns base path from OBS config, otherwise - from script config.
+        It's True only on script launch and only if there is no value in script config.
     """
     if not from_obs_config:
         script_path = obs.obs_data_get_string(script_settings, PN.PROP_BASE_PATH)
+        # If PN.PROP_BASE_PATH is not saved in the script config, then it has a default value,
+        # which is the value from the OBS config.
         if script_path:
             return script_path
 
@@ -893,6 +928,9 @@ def get_base_path(from_obs_config: bool = False) -> str:
 
 
 def get_replay_buffer_max_time() -> int:
+    """
+    Returns replay buffer max time from OBS config (in seconds).
+    """
     config_mode = get_obs_config("Output", "Mode")
     if config_mode == "Simple":
         return get_obs_config("SimpleOutput", "RecRBTime", value_type=int)
@@ -900,27 +938,23 @@ def get_replay_buffer_max_time() -> int:
         return get_obs_config("AdvOut", "RecRBTime", value_type=int)
 
 
-# Script helper functions
-def add_duplicate_suffix(path: str | Path) -> Path:
+def restart_replay_buffering():
     """
-    Adds "(n)" to the end of the file name if the passed file already exists.
-    If "FILE_NAME (n)" also exists - increments n.
-
-    :param path: path to file.
-    :return: updated path.
+    Restart replay buffering, obviously -_-
     """
-    if isinstance(path, Path):
-        path = str(path)
+    _print("Stopping replay buffering...")
+    replay_output = obs.obs_frontend_get_replay_buffer_output()
+    obs.obs_frontend_replay_buffer_stop()
 
-    filename, ext = os.path.splitext(path)
-    num = 1
-    while os.path.exists(path):
-        path = filename + f" ({num})" + ext
-        num += 1
+    while not obs.obs_output_can_begin_data_capture(replay_output, 0):
+        time.sleep(0.1)
+    _print("Replay buffering stopped.")
+    _print("Starting replay buffering...")
+    obs.obs_frontend_replay_buffer_start()
+    _print("Replay buffering started.")
 
-    return Path(path)
 
-
+# -------------------- script_helpers.py --------------------
 def notify(success: bool, clip_path: str):
     """
     Plays and shows success / failure notification if it's enabled in notifications settings.
@@ -981,25 +1015,15 @@ def load_custom_names(data_dict: dict):
     _print(f"{len(custom_names)} custom names are loaded.")
 
 
-def append_exe_history():
-    pid = get_active_window_pid()
-    try:
-        exe = get_executable_path(pid)
-    except:
-        return
-
-    if exe_history is not None:
-        exe_history.appendleft(Path(exe))
-        # _print(f"{exe} added to exe history.")
-
-
-# Clip filename generation
-def gen_clip_name(mode: int) -> str:
+# -------------------- clipname_gen.py --------------------
+def gen_clip_base_name(mode: int) -> str:
     """
-    Generates clip name based on script settings.
+    Generates clip base name based on clip naming mode.
     It's NOT generates new path for clip.
+
+    :param mode: Clip naming mode. If 0 - gets mode from script config.
     """
-    _print("Generating clip name...")
+    _print("Generating clip base name...")
     mode = obs.obs_data_get_int(script_settings, PN.PROP_FILENAME_CONDITION) if not mode else mode
 
     if mode in [1, 2]:
@@ -1007,7 +1031,7 @@ def gen_clip_name(mode: int) -> str:
             _print("Clip file name depends on the name of an active app (.exe file name) at the moment of clip saving.")
             pid = get_active_window_pid()
             executable_path = get_executable_path(pid)
-            executable_path_obj = pathlib.Path(executable_path)
+            executable_path_obj = Path(executable_path)
             _print(f"Current active window process ID: {pid}")
             _print(f"Current active window executable: {executable_path}")
 
@@ -1016,11 +1040,13 @@ def gen_clip_name(mode: int) -> str:
                    "that was active most of the time during the clip recording.")
             if exe_history:
                 executable_path = max(exe_history, key=exe_history.count)
-                executable_path_obj = pathlib.Path(executable_path)
+            else:
+                executable_path = get_executable_path(get_active_window_pid())
+            executable_path_obj = Path(executable_path)
 
 
-        if clip_name := get_name_from_custom_names(executable_path):
-            return clip_name
+        if custom_name := get_name_from_custom_names(executable_path):
+            return custom_name
         else:
             _print(f"{executable_path} or its parents weren't found in custom names list. "
                    f"Assigning the name of the executable: {executable_path_obj.stem}")
@@ -1067,7 +1093,9 @@ def format_filename(clip_name: str, dt: datetime | None = None,
     :param clip_name: clip name.
     :param dt: datetime obj.
     :param force_default_template: use the default template even if the template in the settings is valid.
+        This param uses only in this function (in recursive call) and only if something wrong with users template.
     :param raise_exception: raise exception if template is invalid instead of using default template.
+        This param uses when this function called from properties callback to check template imputed by user.
     """
     if dt is None:
         dt = datetime.now()
@@ -1104,39 +1132,101 @@ def format_filename(clip_name: str, dt: datetime | None = None,
     return filename
 
 
-def restart_replay_buffering():
-    _print("Stopping replay buffering...")
-    replay_output = obs.obs_frontend_get_replay_buffer_output()
-    obs.obs_frontend_replay_buffer_stop()
+def add_duplicate_suffix(path: str | Path) -> Path:
+    """
+    Adds "(n)" to the end of the file name if the passed file already exists.
+    If "FILE_NAME (n)" also exists - increments n.
 
-    while not obs.obs_output_can_begin_data_capture(replay_output, 0):
-        time.sleep(0.1)
-    _print("Replay buffering stopped.")
-    _print("Starting replay buffering...")
-    obs.obs_frontend_replay_buffer_start()
-    _print("Replay buffering started.")
+    :param path: path to file.
+    :return: updated path.
+    """
+    path = str(path)
+
+    filename, ext = os.path.splitext(path)
+    num = 1
+    while os.path.exists(path):
+        path = filename + f" ({num})" + ext
+        num += 1
+
+    return Path(path)
 
 
-def restart_replay_buffering_callback():
-    _print("Restart replay buffering callback.")
-    obs.timer_remove(restart_replay_buffering_callback)
+# -------------------- save_buffer.py --------------------
+def save_buffer(mode: int = 0) -> tuple[str, Path]:
+    dt = datetime.now()
 
-    replay_length = get_replay_buffer_max_time()
-    last_input_time = get_time_since_last_input()
-    if last_input_time < replay_length:
-        next_call = int((replay_length - last_input_time) * 1000)
-        next_call = next_call if next_call >= 2000 else 2000
+    old_file_path = get_last_replay_file_name()
+    _print(f"Old clip file path: {old_file_path}")
 
-        _print(f"Replay length ({replay_length}s) is greater then time since last input ({last_input_time}s). Next call in {next_call / 1000}s.")
-        obs.timer_add(restart_replay_buffering_callback, next_call)
+    clip_name = gen_clip_base_name(mode)
+    ext = old_file_path.split(".")[-1]
+    filename = format_filename(clip_name, dt) + f".{ext}"
+
+    new_folder = Path(get_base_path())
+    if obs.obs_data_get_bool(script_settings, PN.PROP_SAVE_TO_FOLDER):
+        new_folder = new_folder.joinpath(clip_name)
+
+    os.makedirs(str(new_folder), exist_ok=True)
+    new_path = new_folder.joinpath(filename)
+    new_path = add_duplicate_suffix(new_path)
+    _print(f"New clip file path: {new_path}")
+
+    os.rename(old_file_path, str(new_path))
+    _print("Clip file successfully moved.")
+    return clip_name, new_path
+
+
+def save_buffer_with_force_mode(mode: int):
+    """
+    Sends a request to save the replay buffer and setting a specific clip naming mode.
+    Can only be called using hotkeys.
+    """
+    if not obs.obs_frontend_replay_buffer_active():
         return
 
-    # IMPORTANT
-    # I don't know why, but it seems like stopping and starting replay buffering should be in the separate thread.
-    # Otherwise it can "stuck" on stopping.
-    Thread(target=restart_replay_buffering, daemon=True).start()
+    if FORCE_MODE_LOCK.locked():
+        return
 
-# OBS events callbacks
+    FORCE_MODE_LOCK.acquire()
+    global force_mode
+    force_mode = mode
+    obs.obs_frontend_replay_buffer_save()
+
+
+# -------------------- obs_events_callbacks.py --------------------
+def on_buffer_recording_started_callback(event):
+    """
+    Resets and starts recording executables history.
+    Starts replay buffer auto restart loop.
+    """
+    if event is not obs.OBS_FRONTEND_EVENT_REPLAY_BUFFER_STARTED:
+        return
+
+    # Reset and restart exe history
+    global exe_history
+    replay_max_size = get_replay_buffer_max_time()
+    exe_history = deque([], maxlen=replay_max_size)
+    _print(f"Exe history deque created. Maxlen={exe_history.maxlen}.")
+    obs.timer_add(append_exe_history, 1000)
+
+    # Start replay buffer auto restart loop.
+    if restart_loop_time := obs.obs_data_get_int(script_settings, PN.PROP_RESTART_BUFFER_LOOP):
+        obs.timer_add(restart_replay_buffering_callback, restart_loop_time * 1000)
+
+
+def on_buffer_recording_stopped_callback(event):
+    """
+    Stops recording executables history.
+    Stops replay buffer auto restart loop.
+    """
+    if event is not obs.OBS_FRONTEND_EVENT_REPLAY_BUFFER_STOPPED:
+        return
+
+    obs.timer_remove(append_exe_history)
+    obs.timer_remove(restart_replay_buffering_callback)
+    exe_history.clear()
+
+
 def on_buffer_save_callback(event):
     if event is not obs.OBS_FRONTEND_EVENT_REPLAY_BUFFER_SAVED:
         return
@@ -1162,72 +1252,73 @@ def on_buffer_save_callback(event):
     _print("-----------------------------------")
 
 
-def save_buffer_force_mode(mode: int):
-    if not obs.obs_frontend_replay_buffer_active():
-        return
-
-    if FORCE_MODE_LOCK.locked():
-        return
-
-    FORCE_MODE_LOCK.acquire()
-    global force_mode
-    force_mode = mode
-    obs.obs_frontend_replay_buffer_save()
-
-
-def on_buffer_recording_started_callback(event):
+# -------------------- other_callbacks.py --------------------
+def restart_replay_buffering_callback():
     """
-    Resets and starts recording executables history.
+    Restarts replay buffering and adds itself to obs time.
+
+    This callback is only called by the obs timer.
     """
-    if event is not obs.OBS_FRONTEND_EVENT_REPLAY_BUFFER_STARTED:
-        return
-
-    global exe_history
-    replay_max_size = get_replay_buffer_max_time()
-    exe_history = deque([], maxlen=replay_max_size)
-    _print(f"Exe history deque created. Maxlen={exe_history.maxlen}.")
-    obs.timer_add(append_exe_history, 1000)
-
-    if restart_loop_time := obs.obs_data_get_int(script_settings, PN.PROP_RESTART_BUFFER_LOOP):
-        obs.timer_add(restart_replay_buffering_callback, restart_loop_time * 1000)
-
-
-def on_buffer_recording_stopped_callback(event):
-    """
-    Stops recording executables history.
-    """
-    if event is not obs.OBS_FRONTEND_EVENT_REPLAY_BUFFER_STOPPED:
-        return
-    obs.timer_remove(append_exe_history)
+    _print("Restart replay buffering callback.")
     obs.timer_remove(restart_replay_buffering_callback)
-    exe_history.clear()
+
+    replay_length = get_replay_buffer_max_time()
+    last_input_time = get_time_since_last_input()
+    if last_input_time < replay_length:
+        next_call = int((replay_length - last_input_time) * 1000)
+        next_call = next_call if next_call >= 2000 else 2000
+
+        _print(f"Replay length ({replay_length}s) is greater then time since last input ({last_input_time}s). Next call in {next_call / 1000}s.")
+        obs.timer_add(restart_replay_buffering_callback, next_call)
+        return
+
+    # IMPORTANT
+    # I don't know why, but it seems like stopping and starting replay buffering should be in the separate thread.
+    # Otherwise it can "stuck" at stopping state.
+    Thread(target=restart_replay_buffering, daemon=True).start()
+    # I don't re-add this callback to timer again, cz it will be automatically added in on buffering start callback.
 
 
-def save_buffer(mode: int = 0) -> tuple[str, Path]:
-    dt = datetime.now()
+def append_exe_history():
+    """
+    Adds current active executable name in exe history.
+    """
+    pid = get_active_window_pid()
+    try:
+        exe = get_executable_path(pid)
+    except:
+        return
 
-    old_file_path = get_last_replay_file_name()
-    _print(f"Old clip file path: {old_file_path}")
-
-    clip_name = gen_clip_name(mode)
-    ext = old_file_path.split(".")[-1]
-    filename = format_filename(clip_name, dt) + f".{ext}"
-
-    new_folder = Path(get_base_path())
-    if obs.obs_data_get_bool(script_settings, PN.PROP_SAVE_TO_FOLDER):
-        new_folder = new_folder.joinpath(clip_name)
-
-    os.makedirs(str(new_folder), exist_ok=True)
-    new_path = new_folder.joinpath(filename)
-    new_path = add_duplicate_suffix(new_path)
-    _print(f"New clip file path: {new_path}")
-
-    os.rename(old_file_path, str(new_path))
-    _print("Clip file successfully moved.")
-    return clip_name, new_path
+    if exe_history is not None:
+        exe_history.appendleft(Path(exe))
+        # _print(f"{exe} added to exe history.")
 
 
-# Functions imported by OBS
+# -------------------- hotkeys.py --------------------
+def load_hotkeys():
+    hk1_id = obs.obs_hotkey_register_frontend(PN.HK_SAVE_BUFFER_MODE_1,
+                                              "[Smart Replays] Save buffer (force mode 1)",
+                                              lambda pressed: save_buffer_with_force_mode(1) if pressed else None)
+
+    hk2_id = obs.obs_hotkey_register_frontend(PN.HK_SAVE_BUFFER_MODE_2,
+                                              "[Smart Replays] Save buffer (force mode 2)",
+                                              lambda pressed: save_buffer_with_force_mode(2) if pressed else None)
+
+    hk3_id = obs.obs_hotkey_register_frontend(PN.HK_SAVE_BUFFER_MODE_3,
+                                              "[Smart Replays] Save buffer (force mode 3)",
+                                              lambda pressed: save_buffer_with_force_mode(3) if pressed else None)
+
+    hotkey_ids.update({PN.HK_SAVE_BUFFER_MODE_1: hk1_id,
+                       PN.HK_SAVE_BUFFER_MODE_2: hk2_id,
+                       PN.HK_SAVE_BUFFER_MODE_3: hk3_id})
+
+    for key_name in hotkey_ids:
+        key_data = obs.obs_data_get_array(script_settings, key_name)
+        obs.obs_hotkey_load(hotkey_ids[key_name], key_data)
+        obs.obs_data_array_release(key_data)
+
+
+# -------------------- obs_script_other.py --------------------
 def script_defaults(s):
     _print("Loading default values...")
     obs.obs_data_set_default_string(s, PN.PROP_BASE_PATH, get_obs_config("SimpleOutput", "FilePath"))
@@ -1283,41 +1374,6 @@ def script_load(data):
         on_buffer_recording_started_callback(obs.OBS_FRONTEND_EVENT_REPLAY_BUFFER_STARTED)
 
     _print("Script loaded.")
-
-
-def sbfm1(pressed):
-    return save_buffer_force_mode(1) if pressed else None
-
-
-def sbfm2(pressed):
-    return save_buffer_force_mode(2) if pressed else None
-
-
-def sbfm3(pressed):
-    return save_buffer_force_mode(3) if pressed else None
-
-
-def load_hotkeys():
-    hk1_id = obs.obs_hotkey_register_frontend(PN.HK_SAVE_BUFFER_MODE_1,
-                                              "[Smart Replays] Save buffer (force mode 1)",
-                                              sbfm1)
-
-    hk2_id = obs.obs_hotkey_register_frontend(PN.HK_SAVE_BUFFER_MODE_2,
-                                              "[Smart Replays] Save buffer (force mode 2)",
-                                              sbfm2)
-
-    hk3_id = obs.obs_hotkey_register_frontend(PN.HK_SAVE_BUFFER_MODE_2,
-                                              "[Smart Replays] Save buffer (force mode 3)",
-                                              sbfm3)
-
-    hotkey_ids.update({PN.HK_SAVE_BUFFER_MODE_1: hk1_id,
-                       PN.HK_SAVE_BUFFER_MODE_2: hk2_id,
-                       PN.HK_SAVE_BUFFER_MODE_3: hk3_id})
-
-    for key_name in hotkey_ids:
-        key_data = obs.obs_data_get_array(script_settings, key_name)
-        obs.obs_hotkey_load(hotkey_ids[key_name], key_data)
-        obs.obs_data_array_release(key_data)
 
 
 def script_unload():

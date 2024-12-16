@@ -13,12 +13,11 @@
 #  GNU Affero General Public License for more details.
 
 import ast
-from logging import getLogger
+import logging
 from typing import TypeAlias
 
 
-logger = getLogger()
-
+logger = logging.getLogger()
 
 import_dict: TypeAlias = dict[str, set[str | None]]
 from_import_dict: TypeAlias = dict[str, import_dict]
@@ -35,6 +34,9 @@ class Imports:
                    name: str | None,
                    asname: str | None,
                    verbose: bool = True):
+        if module_name == 'obspython':
+            return
+
         module_asname = module_asname if module_asname != module_name else None
         name = name or None
         asname = asname if asname != name else None
@@ -146,7 +148,7 @@ FILES_ORDER = ['ui',
                'obs_script_other']
 
 if __name__ == '__main__':
-    import os
+    logging.basicConfig(level=logging.INFO)
     imports = Imports()
     code_without_imports = ''
 
@@ -158,20 +160,24 @@ if __name__ == '__main__':
         file_path = f'modular/{file}'
 
         file_imports, code_start_line = find_imports(file_path)
-        print(f'{file}: {code_start_line}')
 
         with open(file_path, 'r', encoding='utf-8') as f:
             file_code = ''.join(f.readlines()[code_start_line:]).strip().replace(license_text, "")
 
-        curr_code = '# ' + '-' * 20 + file + '-' * 20 + '\n'
+        curr_code = f'# {"-"*20} {file} {"-"*20}\n'
         curr_code += file_code + '\n\n\n'
         code_without_imports += curr_code
 
         imports.update(file_imports)
 
     total_code = license_text
-    total_code += str(imports) + '\n\n\n'
+    total_code += str(imports) + '\n\n'
+    total_code += (
+'''if __name__ != '__main__':
+    import obspython as obs'''
+    )
+    total_code += '\n\n\n'
     total_code += code_without_imports.strip()
 
-    with open('start_replays_gen.py', 'w', encoding='utf-8') as f:
+    with open('smart_replays.py', 'w', encoding='utf-8') as f:
         f.write(total_code)

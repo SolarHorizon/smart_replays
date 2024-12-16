@@ -15,8 +15,8 @@
 from .globals import script_settings, PN
 from .properties_callbacks import (open_github_callback,
                                    update_notifications_menu_callback,
-                                   import_custom_names,
-                                   export_custom_names,
+                                   import_custom_names_from_json_callback,
+                                   export_custom_names_to_json_callback,
                                    check_base_path_callback,
                                    check_filename_template_callback,
                                    update_custom_names_callback)
@@ -311,7 +311,7 @@ Path cannot contain <code style="color: cyan">&lt; &gt; | * ? " %</code> charact
         custom_names_props,
         PN.BTN_CUSTOM_NAMES_IMPORT,
         "Import custom names",
-        import_custom_names,
+        import_custom_names_from_json_callback,
     )
 
     obs.obs_properties_add_path(
@@ -327,7 +327,7 @@ Path cannot contain <code style="color: cyan">&lt; &gt; | * ? " %</code> charact
         custom_names_props,
         PN.BTN_CUSTOM_NAMES_EXPORT,
         "Export custom names",
-        export_custom_names,
+        export_custom_names_to_json_callback,
     )
 
     # ------ Other ------

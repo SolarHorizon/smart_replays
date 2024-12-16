@@ -7,11 +7,22 @@ Remember that the logic of this script implies that it is single-file!
 
 Use build_script.py to “build” the one-file script from the modular version.
 
-If you want to modify this variant of script, there are some tips:
+
+If you want to modify something in here, there are some tips for you:
 
 1. If you are importing something from script modules, use relative imports.
-    Example: `from .const import PN`
+    Example: `from .globals import PN`
 
-2. If you are creating new global variable, create it in `globals.py`.
+2. Write all relative imports at the beginning of the code.
+    All relative imports in the middle of the code or somewhere else except beginning
+    will not be deleted while building one-file script, that will cause errors in OBS.
 
-3. If you are changing value of some variable from `globals.py` in another module, dont forget to use `global` statement.
+3. If you are creating new global variable, create it in `globals.py`.
+
+4. If you are changing value of some variable from `globals.py` in another module,
+    don't forget to use `global` statement (even if your IDE doesn't tell you to do it).
+    Remember: at the end all these files will be merged in one file.
+
+5. DO NOT import any names from `obspython` as well as DO NOT just `import obspython`.
+    5.1 If you need to import `obspython` use `import obspython as obs`;
+    5.2 If you need some specific names from `obspython`, use `import obspython as obs` and then `obs.some_name`;
