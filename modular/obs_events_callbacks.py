@@ -12,11 +12,11 @@
 #  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 #  GNU Affero General Public License for more details.
 
-from .globals import exe_history, script_settings, PN, FORCE_MODE_LOCK
+from .globals import clip_exe_history, video_exe_history, script_settings, PN, FORCE_MODE_LOCK
 from .tech import _print
 from .obs_related import get_replay_buffer_max_time, restart_replay_buffering
 from .script_helpers import notify
-from .other_callbacks import restart_replay_buffering_callback, append_exe_history
+from .other_callbacks import restart_replay_buffering_callback, append_clip_exe_history, append_video_exe_history
 from .save_buffer import save_buffer
 
 import obspython as obs
@@ -34,11 +34,11 @@ def on_buffer_recording_started_callback(event):
         return
 
     # Reset and restart exe history
-    global exe_history
+    global clip_exe_history
     replay_max_size = get_replay_buffer_max_time()
-    exe_history = deque([], maxlen=replay_max_size)
-    _print(f"Exe history deque created. Maxlen={exe_history.maxlen}.")
-    obs.timer_add(append_exe_history, 1000)
+    clip_exe_history = deque([], maxlen=replay_max_size)
+    _print(f"Exe history deque created. Maxlen={clip_exe_history.maxlen}.")
+    obs.timer_add(append_clip_exe_history, 1000)
 
     # Start replay buffer auto restart loop.
     if restart_loop_time := obs.obs_data_get_int(script_settings, PN.PROP_RESTART_BUFFER_LOOP):
@@ -53,9 +53,9 @@ def on_buffer_recording_stopped_callback(event):
     if event is not obs.OBS_FRONTEND_EVENT_REPLAY_BUFFER_STOPPED:
         return
 
-    obs.timer_remove(append_exe_history)
+    obs.timer_remove(append_clip_exe_history)
     obs.timer_remove(restart_replay_buffering_callback)
-    exe_history.clear()
+    clip_exe_history.clear()
 
 
 def on_buffer_save_callback(event):
@@ -81,3 +81,31 @@ def on_buffer_save_callback(event):
         _print(traceback.format_exc())
         notify(False, "")
     _print("-----------------------------------")
+
+
+def on_video_recording_started_callback(event):
+    if event is not obs.OBS_FRONTEND_EVENT_RECORDING_STARTED:
+        return
+
+    global video_exe_history
+    video_exe_history = {}
+    obs.timer_add(append_video_exe_history, 1000)
+
+
+def on_video_recording_stopping_callback(event):
+    if event is not obs.OBS_FRONTEND_EVENT_RECORDING_STOPPING:
+        return
+
+    obs.timer_remove(append_video_exe_history)
+
+
+def on_video_recording_stopped_callback(event):
+    if event is not obs.OBS_FRONTEND_EVENT_RECORDING_STOPPED:
+        return
+
+    # todo: save video into new location
+
+    global video_exe_history
+    video_exe_history = None
+
+    _print(obs.obs_frontend_get_last_recording())

@@ -13,7 +13,7 @@
 #  GNU Affero General Public License for more details.
 
 from .globals import (script_settings,
-                      exe_history,
+                      clip_exe_history,
                       DEFAULT_CUSTOM_NAMES,
                       PATH_PROHIBITED_CHARS,
                       FILENAME_PROHIBITED_CHARS,

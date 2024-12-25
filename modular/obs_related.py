@@ -84,8 +84,8 @@ def get_base_path(from_obs_config: bool = False) -> str:
         It's True only on script launch and only if there is no value in script config.
     """
     if not from_obs_config:
-        script_path = obs.obs_data_get_string(script_settings, PN.PROP_BASE_PATH)
-        # If PN.PROP_BASE_PATH is not saved in the script config, then it has a default value,
+        script_path = obs.obs_data_get_string(script_settings, PN.PROP_CLIPS_BASE_PATH)
+        # If PN.PROP_CLIPS_BASE_PATH is not saved in the script config, then it has a default value,
         # which is the value from the OBS config.
         if script_path:
             return script_path

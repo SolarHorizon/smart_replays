@@ -13,7 +13,7 @@
 #  GNU Affero General Public License for more details.
 
 
-from .globals import exe_history
+from .globals import clip_exe_history, video_exe_history
 from .obs_related import get_replay_buffer_max_time, restart_replay_buffering
 from .tech import get_time_since_last_input, get_active_window_pid, get_executable_path, _print
 
@@ -48,9 +48,9 @@ def restart_replay_buffering_callback():
     # I don't re-add this callback to timer again, cz it will be automatically added in on buffering start callback.
 
 
-def append_exe_history():
+def append_clip_exe_history():
     """
-    Adds current active executable name in exe history.
+    Adds current active executable path in clip exe history.
     """
     pid = get_active_window_pid()
     try:
@@ -58,6 +58,26 @@ def append_exe_history():
     except:
         return
 
-    if exe_history is not None:
-        exe_history.appendleft(Path(exe))
+    if clip_exe_history is not None:
+        clip_exe_history.appendleft(Path(exe))
         # _print(f"{exe} added to exe history.")
+
+
+def append_video_exe_history():
+    """
+    Adds current active executable path in video exe history.
+    """
+    pid = get_active_window_pid()
+    try:
+        exe = get_executable_path(pid)
+    except:
+        return
+
+    if video_exe_history is None:
+        return
+
+    path = Path(exe)
+    if path not in video_exe_history:
+        video_exe_history[path] = 1
+    else:
+        video_exe_history[path] += 1

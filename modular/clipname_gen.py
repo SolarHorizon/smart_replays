@@ -13,7 +13,7 @@
 #  GNU Affero General Public License for more details.
 
 from .globals import (script_settings,
-                      exe_history,
+                      clip_exe_history,
                       custom_names,
                       DEFAULT_FILENAME_FORMAT,
                       FILENAME_PROHIBITED_CHARS, PN)
@@ -36,7 +36,7 @@ def gen_clip_base_name(mode: int) -> str:
     :param mode: Clip naming mode. If 0 - gets mode from script config.
     """
     _print("Generating clip base name...")
-    mode = obs.obs_data_get_int(script_settings, PN.PROP_FILENAME_CONDITION) if not mode else mode
+    mode = obs.obs_data_get_int(script_settings, PN.PROP_CLIPS_FILENAME_CONDITION) if not mode else mode
 
     if mode in [1, 2]:
         if mode == 1:
@@ -50,8 +50,8 @@ def gen_clip_base_name(mode: int) -> str:
         else:  # if mode == 2
             _print("Clip file name depends on the name of an app (.exe file name) "
                    "that was active most of the time during the clip recording.")
-            if exe_history:
-                executable_path = max(exe_history, key=exe_history.count)
+            if clip_exe_history:
+                executable_path = max(clip_exe_history, key=clip_exe_history.count)
             else:
                 executable_path = get_executable_path(get_active_window_pid())
             executable_path_obj = Path(executable_path)
@@ -112,7 +112,7 @@ def format_filename(clip_name: str, dt: datetime | None = None,
     if dt is None:
         dt = datetime.now()
 
-    template = obs.obs_data_get_string(script_settings, PN.PROP_FILENAME_FORMAT)
+    template = obs.obs_data_get_string(script_settings, PN.PROP_CLIPS_FILENAME_FORMAT)
 
     if not template:
         if raise_exception:

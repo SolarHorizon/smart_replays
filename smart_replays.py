@@ -184,7 +184,10 @@ DEFAULT_CUSTOM_NAMES = [
 ]
 
 user32 = ctypes.windll.user32
-exe_history: deque | None = None
+
+clip_exe_history: deque[Path, ...] | None = None
+video_exe_history: dict[Path, int] | None = None  # {Path(path/to/executable): active_seconds_amount
+
 custom_names: dict[Path, str] = {}
 script_settings = None
 hotkey_ids: dict = {}
@@ -915,7 +918,7 @@ def get_base_path(from_obs_config: bool = False) -> str:
     """
     if not from_obs_config:
         script_path = obs.obs_data_get_string(script_settings, PN.PROP_BASE_PATH)
-        # If PN.PROP_BASE_PATH is not saved in the script config, then it has a default value,
+        # If PN.PROP_CLIPS_BASE_PATH is not saved in the script config, then it has a default value,
         # which is the value from the OBS config.
         if script_path:
             return script_path
@@ -1038,8 +1041,8 @@ def gen_clip_base_name(mode: int) -> str:
         else:  # if mode == 2
             _print("Clip file name depends on the name of an app (.exe file name) "
                    "that was active most of the time during the clip recording.")
-            if exe_history:
-                executable_path = max(exe_history, key=exe_history.count)
+            if clip_exe_history:
+                executable_path = max(clip_exe_history, key=clip_exe_history.count)
             else:
                 executable_path = get_executable_path(get_active_window_pid())
             executable_path_obj = Path(executable_path)
@@ -1203,11 +1206,11 @@ def on_buffer_recording_started_callback(event):
         return
 
     # Reset and restart exe history
-    global exe_history
+    global clip_exe_history
     replay_max_size = get_replay_buffer_max_time()
-    exe_history = deque([], maxlen=replay_max_size)
-    _print(f"Exe history deque created. Maxlen={exe_history.maxlen}.")
-    obs.timer_add(append_exe_history, 1000)
+    clip_exe_history = deque([], maxlen=replay_max_size)
+    _print(f"Exe history deque created. Maxlen={clip_exe_history.maxlen}.")
+    obs.timer_add(append_clip_exe_history, 1000)
 
     # Start replay buffer auto restart loop.
     if restart_loop_time := obs.obs_data_get_int(script_settings, PN.PROP_RESTART_BUFFER_LOOP):
@@ -1222,9 +1225,9 @@ def on_buffer_recording_stopped_callback(event):
     if event is not obs.OBS_FRONTEND_EVENT_REPLAY_BUFFER_STOPPED:
         return
 
-    obs.timer_remove(append_exe_history)
+    obs.timer_remove(append_clip_exe_history)
     obs.timer_remove(restart_replay_buffering_callback)
-    exe_history.clear()
+    clip_exe_history.clear()
 
 
 def on_buffer_save_callback(event):
@@ -1250,6 +1253,38 @@ def on_buffer_save_callback(event):
         _print(traceback.format_exc())
         notify(False, "")
     _print("-----------------------------------")
+
+
+def on_video_recording_started_callback(event):
+    if event is not obs.OBS_FRONTEND_EVENT_RECORDING_STARTED:
+        return
+
+    global video_exe_history
+    video_exe_history = {}
+    obs.timer_add(append_video_exe_history, 1000)
+
+
+def on_video_recording_stopping_callback(event):
+    if event is not obs.OBS_FRONTEND_EVENT_RECORDING_STOPPING:
+        return
+
+    obs.timer_remove(append_video_exe_history)
+
+
+def on_video_recording_stopped_callback(event):
+    if event is not obs.OBS_FRONTEND_EVENT_RECORDING_STOPPED:
+        return
+
+    # todo: save video into new location
+
+    global video_exe_history
+    video_exe_history = None
+
+    _print(obs.obs_frontend_get_last_recording())
+
+
+def just_event(event):
+    print(event)
 
 
 # -------------------- other_callbacks.py --------------------
@@ -1279,9 +1314,9 @@ def restart_replay_buffering_callback():
     # I don't re-add this callback to timer again, cz it will be automatically added in on buffering start callback.
 
 
-def append_exe_history():
+def append_clip_exe_history():
     """
-    Adds current active executable name in exe history.
+    Adds current active executable path in clip exe history.
     """
     pid = get_active_window_pid()
     try:
@@ -1289,9 +1324,29 @@ def append_exe_history():
     except:
         return
 
-    if exe_history is not None:
-        exe_history.appendleft(Path(exe))
+    if clip_exe_history is not None:
+        clip_exe_history.appendleft(Path(exe))
         # _print(f"{exe} added to exe history.")
+
+
+def append_video_exe_history():
+    """
+    Adds current active executable path in video exe history.
+    """
+    pid = get_active_window_pid()
+    try:
+        exe = get_executable_path(pid)
+    except:
+        return
+
+    if video_exe_history is None:
+        return
+
+    path = Path(exe)
+    if path not in video_exe_history:
+        video_exe_history[path] = 1
+    else:
+        video_exe_history[path] += 1
 
 
 # -------------------- hotkeys.py --------------------
@@ -1368,6 +1423,12 @@ def script_load(data):
     obs.obs_frontend_add_event_callback(on_buffer_save_callback)
     obs.obs_frontend_add_event_callback(on_buffer_recording_started_callback)
     obs.obs_frontend_add_event_callback(on_buffer_recording_stopped_callback)
+
+    obs.obs_frontend_add_event_callback(on_video_recording_started_callback)
+    obs.obs_frontend_add_event_callback(on_video_recording_stopping_callback)
+    obs.obs_frontend_add_event_callback(on_video_recording_stopped_callback)
+
+    obs.obs_frontend_add_event_callback(just_event)
     load_hotkeys()
 
     if obs.obs_frontend_replay_buffer_active():
@@ -1377,7 +1438,7 @@ def script_load(data):
 
 
 def script_unload():
-    obs.timer_remove(append_exe_history)
+    obs.timer_remove(append_clip_exe_history)
     obs.timer_remove(restart_replay_buffering_callback)
 
     _print("Script unloaded.")

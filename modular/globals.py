@@ -30,7 +30,10 @@ DEFAULT_CUSTOM_NAMES = [
 ]
 
 user32 = ctypes.windll.user32
-exe_history: deque | None = None
+
+clip_exe_history: deque[Path, ...] | None = None
+video_exe_history: dict[Path, int] | None = None  # {Path(path/to/executable): active_seconds_amount
+
 custom_names: dict[Path, str] = {}
 script_settings = None
 hotkey_ids: dict = {}
@@ -38,27 +41,30 @@ force_mode = 0
 
 
 class PropertiesNames:
-    GR_PATHS = "paths"
+    GR_CLIPS_PATHS = "clip_paths"
+    GR_VIDEO_PATHS = "video_paths"
     GR_NOTIFICATIONS = "notifications"
     GR_POPUP = "popup"
     GR_CUSTOM_NAMES = "custom_names"
     GR_OTHER = "other"
 
-    PROP_BASE_PATH = "base_path"
+    PROP_CLIPS_BASE_PATH = "clips_base_path"
     TEXT_BASE_PATH_INFO = "base_path_info"
-    PROP_FILENAME_CONDITION = "filename_condition"
-    TXT_HOTKEY_TIP = "hotkey_tip"
-    PROP_FILENAME_FORMAT = "filename_format"
-    TXT_FILENAME_FORMAT_ERR = "filename_format_err"
-    PROP_SAVE_TO_FOLDER = "save_to_folder"
+    PROP_CLIPS_FILENAME_CONDITION = "clips_filename_condition"
+    TXT_CLIPS_HOTKEY_TIP = "clips_hotkey_tip"
+    PROP_CLIPS_FILENAME_FORMAT = "clips_filename_format"
+    TXT_CLIPS_FILENAME_FORMAT_ERR = "clips_filename_format_err"
+    PROP_CLIPS_SAVE_TO_FOLDER = "clips_save_to_folder"
+
+    PROP_VIDEOS_FILENAME_CONDITION = "videos_filename_condition"
+    TXT_VIDEOS_HOTKEY_TIP = "videos_hotkey_tip"
+    PROP_VIDEOS_FILENAME_FORMAT = "videos_filename_format"
+    PROP_VIDEOS_SAVE_TO_FOLDER = "videos_save_to_folder"
 
     PROP_NOTIFICATION_ON_SUCCESS = "notification_on_success"
     PROP_NOTIFICATION_ON_SUCCESS_PATH = "notification_on_success_file"
     PROP_NOTIFICATION_ON_FAILURE = "notification_on_failure"
     PROP_NOTIFICATION_ON_FAILURE_PATH = "notification_on_failure_file"
-
-    PROP_POPUP_ON_SUCCESS = "prop_popup_on_success"
-    PROP_POPUP_ON_FAILURE = "prop_popup_on_failure"
 
     PROP_CUSTOM_NAMES_LIST = "custom_names_list"
     TXT_CUSTOM_NAME_DESC = "custom_names_desc"

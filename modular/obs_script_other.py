@@ -20,10 +20,13 @@ from .globals import (hotkey_ids,
 
 from .tech import _print
 from .obs_related import get_obs_config
-from .other_callbacks import restart_replay_buffering_callback, append_exe_history
+from .other_callbacks import restart_replay_buffering_callback, append_clip_exe_history
 from .obs_events_callbacks import (on_buffer_save_callback,
                                    on_buffer_recording_started_callback,
-                                   on_buffer_recording_stopped_callback)
+                                   on_buffer_recording_stopped_callback,
+                                   on_video_recording_started_callback,
+                                   on_video_recording_stopping_callback,
+                                   on_video_recording_stopped_callback)
 
 from .script_helpers import load_custom_names
 
@@ -35,10 +38,10 @@ import json
 
 def script_defaults(s):
     _print("Loading default values...")
-    obs.obs_data_set_default_string(s, PN.PROP_BASE_PATH, get_obs_config("SimpleOutput", "FilePath"))
-    obs.obs_data_set_default_int(s, PN.PROP_FILENAME_CONDITION, 1)
-    obs.obs_data_set_default_string(s, PN.PROP_FILENAME_FORMAT, DEFAULT_FILENAME_FORMAT)
-    obs.obs_data_set_default_bool(s, PN.PROP_SAVE_TO_FOLDER, True)
+    obs.obs_data_set_default_string(s, PN.PROP_CLIPS_BASE_PATH, get_obs_config("SimpleOutput", "FilePath"))
+    obs.obs_data_set_default_int(s, PN.PROP_CLIPS_FILENAME_CONDITION, 1)
+    obs.obs_data_set_default_string(s, PN.PROP_CLIPS_FILENAME_FORMAT, DEFAULT_FILENAME_FORMAT)
+    obs.obs_data_set_default_bool(s, PN.PROP_CLIPS_SAVE_TO_FOLDER, True)
     obs.obs_data_set_default_bool(s, PN.PROP_NOTIFICATION_ON_SUCCESS, False)
     obs.obs_data_set_default_bool(s, PN.PROP_NOTIFICATION_ON_FAILURE, False)
     obs.obs_data_set_default_int(s, PN.PROP_RESTART_BUFFER_LOOP, 3600)
@@ -82,6 +85,10 @@ def script_load(data):
     obs.obs_frontend_add_event_callback(on_buffer_save_callback)
     obs.obs_frontend_add_event_callback(on_buffer_recording_started_callback)
     obs.obs_frontend_add_event_callback(on_buffer_recording_stopped_callback)
+
+    obs.obs_frontend_add_event_callback(on_video_recording_started_callback)
+    obs.obs_frontend_add_event_callback(on_video_recording_stopping_callback)
+    obs.obs_frontend_add_event_callback(on_video_recording_started_callback)
     load_hotkeys()
 
     if obs.obs_frontend_replay_buffer_active():
@@ -91,7 +98,7 @@ def script_load(data):
 
 
 def script_unload():
-    obs.timer_remove(append_exe_history)
+    obs.timer_remove(append_clip_exe_history)
     obs.timer_remove(restart_replay_buffering_callback)
 
     _print("Script unloaded.")

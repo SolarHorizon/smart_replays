@@ -52,7 +52,7 @@ def script_properties():
     # Base path
     base_path_prop = obs.obs_properties_add_path(
         props=paths_props,
-        name=PN.PROP_BASE_PATH,
+        name=PN.PROP_CLIPS_BASE_PATH,
         description="Base path for clips",
         type=obs.OBS_PATH_DIRECTORY,
         filter=None,
@@ -71,7 +71,7 @@ def script_properties():
     # Filename condition
     filename_condition = obs.obs_properties_add_list(
         props=paths_props,
-        name=PN.PROP_FILENAME_CONDITION,
+        name=PN.PROP_CLIPS_FILENAME_CONDITION,
         description="Clip name depends on",
         type=obs.OBS_COMBO_TYPE_RADIO,
         format=obs.OBS_COMBO_FORMAT_INT
@@ -94,7 +94,7 @@ def script_properties():
 
     t = obs.obs_properties_add_text(
         props=paths_props,
-        name = PN.TXT_HOTKEY_TIP,
+        name = PN.TXT_CLIPS_HOTKEY_TIP,
         description="You can customize hotkeys for each mode in File -> Settings -> Hotkeys",
         type=obs.OBS_TEXT_INFO
     )
@@ -103,7 +103,7 @@ def script_properties():
     # Filename format
     filename_format_prop = obs.obs_properties_add_text(
         props=paths_props,
-        name=PN.PROP_FILENAME_FORMAT,
+        name=PN.PROP_CLIPS_FILENAME_FORMAT,
         description="File name format",
         type=obs.OBS_TEXT_DEFAULT
     )
@@ -177,7 +177,7 @@ Example: 00, 01, …, 53</td></tr>
 
     filename_format_err_text = obs.obs_properties_add_text(
         props=paths_props,
-        name=PN.TXT_FILENAME_FORMAT_ERR,
+        name=PN.TXT_CLIPS_FILENAME_FORMAT_ERR,
         description="<font color=\"red\"><pre> Invalid format!</pre></font>",
         type=obs.OBS_TEXT_INFO
     )
@@ -186,7 +186,7 @@ Example: 00, 01, …, 53</td></tr>
     # Save to folders
     obs.obs_properties_add_bool(
         props=paths_props,
-        name=PN.PROP_SAVE_TO_FOLDER,
+        name=PN.PROP_CLIPS_SAVE_TO_FOLDER,
         description="Create different folders for different clip names",
     )
 

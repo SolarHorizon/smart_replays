@@ -34,7 +34,7 @@ def save_buffer(mode: int = 0) -> tuple[str, Path]:
     filename = format_filename(clip_name, dt) + f".{ext}"
 
     new_folder = Path(get_base_path())
-    if obs.obs_data_get_bool(script_settings, PN.PROP_SAVE_TO_FOLDER):
+    if obs.obs_data_get_bool(script_settings, PN.PROP_CLIPS_SAVE_TO_FOLDER):
         new_folder = new_folder.joinpath(clip_name)
 
     os.makedirs(str(new_folder), exist_ok=True)

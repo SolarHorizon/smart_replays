@@ -96,7 +96,7 @@ def check_filename_template_callback(p, prop, data):
     Checks filename template.
     If template is invalid, shows warning.
     """
-    error_text = obs.obs_properties_get(p, PN.TXT_FILENAME_FORMAT_ERR)
+    error_text = obs.obs_properties_get(p, PN.TXT_CLIPS_FILENAME_FORMAT_ERR)
     dt = datetime.now()
 
     try:
@@ -131,13 +131,13 @@ def check_base_path_callback(p, prop, data):
     warn_text = obs.obs_properties_get(p, PN.TEXT_BASE_PATH_INFO)
 
     obs_records_path = Path(get_base_path(from_obs_config=True))
-    curr_path = Path(obs.obs_data_get_string(data, PN.PROP_BASE_PATH))
+    curr_path = Path(obs.obs_data_get_string(data, PN.PROP_CLIPS_BASE_PATH))
 
     if not len(curr_path.parts) or obs_records_path.parts[0] == curr_path.parts[0]:
         obs.obs_property_text_set_info_type(warn_text, obs.OBS_TEXT_INFO_WARNING)
     else:
         obs.obs_property_text_set_info_type(warn_text, obs.OBS_TEXT_INFO_ERROR)
-        obs.obs_data_set_string(data, PN.PROP_BASE_PATH, str(obs_records_path))
+        obs.obs_data_set_string(data, PN.PROP_CLIPS_BASE_PATH, str(obs_records_path))
     return True
 
 
