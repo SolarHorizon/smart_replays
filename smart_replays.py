@@ -174,7 +174,7 @@ if __name__ == '__main__':
 
 
 # ------------- OBS Script ----------------
-VERSION = "1.0.1"
+VERSION = "1.0.2"
 OBS_VERSION_STRING = obs.obs_get_version_string()
 OBS_VERSION = [int(i) for i in OBS_VERSION_STRING.split('.')]
 FORCE_MODE_LOCK = Lock()
