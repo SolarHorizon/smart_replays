@@ -28,6 +28,7 @@ from ctypes import wintypes
 from datetime import datetime
 from collections import deque
 from threading import Lock, Thread
+from enum import Enum
 
 import tkinter as tk
 from tkinter import font as f
@@ -174,6 +175,8 @@ if __name__ == '__main__':
 
 # ------------- OBS Script ----------------
 VERSION = "1.0.1"
+OBS_VERSION_STRING = obs.obs_get_version_string()
+OBS_VERSION = [int(i) for i in OBS_VERSION_STRING.split('.')]
 FORCE_MODE_LOCK = Lock()
 NAME_PROHIBITED_CHARS = r'/\:"<>*?|%'
 PATH_PROHIBITED_CHARS = r'"<>*?|%'
@@ -189,6 +192,12 @@ custom_names: dict[Path, str] = {}
 script_settings = None
 hotkey_ids: dict = {}
 force_mode = 0
+
+
+class ConfigTypes(Enum):
+    PROFILE = 0
+    APP = 1
+    USER = 2
 
 
 class LASTINPUTINFO(ctypes.Structure):
@@ -711,9 +720,7 @@ def check_base_path_callback(p, prop, data):
     warn_text = obs.obs_properties_get(p, PN.TEXT_BASE_PATH_INFO)
 
     obs_records_path = Path(get_base_path(from_obs_config=True))
-    print(obs_records_path)
     curr_path = Path(obs.obs_data_get_string(data, PN.PROP_BASE_PATH))
-    print(curr_path)
 
     if not len(curr_path.parts) or obs_records_path.parts[0] == curr_path.parts[0]:
         obs.obs_property_text_set_info_type(warn_text, obs.OBS_TEXT_INFO_WARNING)
@@ -821,7 +828,7 @@ def get_time_since_last_input() -> float:
 def get_obs_config(section_name: str | None = None,
                    param_name: str | None = None,
                    value_type: type[str, int, bool, float] = str,
-                   global_config: bool = False):
+                   config_type: ConfigTypes = ConfigTypes.PROFILE):
     """
     Gets a value from OBS config.
     If the value is not set, it will use the default value. If there is no default value, it will return NULL.
@@ -830,9 +837,18 @@ def get_obs_config(section_name: str | None = None,
     :param section_name: Section name. If not specified, returns the OBS config.
     :param param_name: Parameter name. If not specified, returns the OBS config.
     :param value_type: Type of value (str, int, bool, float).
-    :param global_config: Search in global config or profile config?
+    :param config_type: Which config search in? (global / profile / user (obs v31 or higher)
     """
-    cfg = obs.obs_frontend_get_global_config() if global_config else obs.obs_frontend_get_profile_config()
+    if config_type is ConfigTypes.PROFILE:
+        cfg = obs.obs_frontend_get_profile_config()
+    elif config_type is ConfigTypes.APP:
+        cfg = obs.obs_frontend_get_global_config()
+    else:
+        if OBS_VERSION[0] < 31:
+            cfg = obs.obs_frontend_get_global_config()
+        else:
+            cfg = obs.obs_frontend_get_user_config()
+
 
     if not section_name or not param_name:
         return cfg
@@ -925,7 +941,7 @@ def notify(success: bool, clip_path: str):
     """
     sound_notifications = obs.obs_data_get_bool(script_settings, PN.GR_NOTIFICATIONS)
     popup_notifications = obs.obs_data_get_bool(script_settings, PN.GR_POPUP)
-    python_exe = os.path.join(get_obs_config("Python", "Path64bit", str, True), "pythonw.exe")
+    python_exe = os.path.join(get_obs_config("Python", "Path64bit", str, ConfigTypes.USER), "pythonw.exe")
 
     if success:
         if sound_notifications and obs.obs_data_get_bool(script_settings, PN.PROP_NOTIFICATION_ON_SUCCESS):
