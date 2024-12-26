@@ -25,68 +25,7 @@ import obspython as obs
 import sys
 
 
-def setup_clip_paths_settings(group_obj):
-    # ----- Clips base path -----
-    base_path_prop = obs.obs_properties_add_path(
-        props=group_obj,
-        name=PN.PROP_CLIPS_BASE_PATH,
-        description="Base path for clips",
-        type=obs.OBS_PATH_DIRECTORY,
-        filter=None,
-        default_path="C:\\"
-    )
-    t = obs.obs_properties_add_text(
-        props=group_obj,
-        name=PN.TEXT_BASE_PATH_INFO,
-        description="The path must be on the same disk as the path for OBS records "
-                    "(File -> Settings -> Output -> Recording -> Recording Path).\n"
-                    "Otherwise, the script will not be able to move the clip to the correct folder.",
-        type=obs.OBS_TEXT_INFO
-    )
-    obs.obs_property_text_set_info_type(t, obs.OBS_TEXT_INFO_WARNING)
-
-    # ----- Clips name condition -----
-    filename_condition = obs.obs_properties_add_list(
-        props=group_obj,
-        name=PN.PROP_CLIPS_FILENAME_CONDITION,
-        description="Clip name depends on",
-        type=obs.OBS_COMBO_TYPE_RADIO,
-        format=obs.OBS_COMBO_FORMAT_INT
-    )
-    obs.obs_property_list_add_int(
-        p=filename_condition,
-        name="the name of an active app (.exe file name) at the moment of clip saving",
-        val=1
-    )
-    obs.obs_property_list_add_int(
-        p=filename_condition,
-        name="the name of an app (.exe file name) that was active most of the time during the clip recording",
-        val=2
-    )
-    obs.obs_property_list_add_int(
-        p=filename_condition,
-        name="the name of the current scene",
-        val=3
-    )
-
-    t = obs.obs_properties_add_text(
-        props=group_obj,
-        name=PN.TXT_CLIPS_HOTKEY_TIP,
-        description="You can set up hotkeys for each mode in File -> Settings -> Hotkeys",
-        type=obs.OBS_TEXT_INFO
-    )
-    obs.obs_property_text_set_info_type(t, obs.OBS_TEXT_INFO_WARNING)
-
-    # ----- Clip file name format -----
-    filename_format_prop = obs.obs_properties_add_text(
-        props=group_obj,
-        name=PN.PROP_CLIPS_FILENAME_FORMAT,
-        description="File name format",
-        type=obs.OBS_TEXT_DEFAULT
-    )
-    obs.obs_property_set_long_description(
-        filename_format_prop,
-        """<table>
+variables_tip = """<table>
 <tr><th align='left'>%NAME</th><td> - name of the clip.</td></tr>
 
 <tr><th align='left'>%a</th><td> - Weekday as locale’s abbreviated name.<br/>
@@ -150,7 +89,71 @@ Example: 00, 01, …, 53</td></tr>
 Example: 00, 01, …, 53</td></tr>
 
 <tr><th align='left'>%%</th><td> - A literal '%' character.</td></tr>
-</table>""")
+</table>"""
+
+
+def setup_clip_paths_settings(group_obj):
+    # ----- Clips base path -----
+    base_path_prop = obs.obs_properties_add_path(
+        props=group_obj,
+        name=PN.PROP_CLIPS_BASE_PATH,
+        description="Base path for clips",
+        type=obs.OBS_PATH_DIRECTORY,
+        filter=None,
+        default_path="C:\\"
+    )
+    t = obs.obs_properties_add_text(
+        props=group_obj,
+        name=PN.TEXT_BASE_PATH_INFO,
+        description="The path must be on the same disk as the path for OBS records "
+                    "(File -> Settings -> Output -> Recording -> Recording Path).\n"
+                    "Otherwise, the script will not be able to move the clip to the correct folder.",
+        type=obs.OBS_TEXT_INFO
+    )
+    obs.obs_property_text_set_info_type(t, obs.OBS_TEXT_INFO_WARNING)
+
+    # ----- Clips name condition -----
+    filename_condition = obs.obs_properties_add_list(
+        props=group_obj,
+        name=PN.PROP_CLIPS_FILENAME_CONDITION,
+        description="Clip name based on",
+        type=obs.OBS_COMBO_TYPE_RADIO,
+        format=obs.OBS_COMBO_FORMAT_INT
+    )
+    obs.obs_property_list_add_int(
+        p=filename_condition,
+        name="the name of an active app (.exe file name) at the moment of clip saving",
+        val=1
+    )
+    obs.obs_property_list_add_int(
+        p=filename_condition,
+        name="the name of an app (.exe file name) that was active most of the time during the clip recording",
+        val=2
+    )
+    obs.obs_property_list_add_int(
+        p=filename_condition,
+        name="the name of the current scene",
+        val=3
+    )
+
+    t = obs.obs_properties_add_text(
+        props=group_obj,
+        name=PN.TXT_CLIPS_HOTKEY_TIP,
+        description="You can set up hotkeys for each mode in File -> Settings -> Hotkeys",
+        type=obs.OBS_TEXT_INFO
+    )
+    obs.obs_property_text_set_info_type(t, obs.OBS_TEXT_INFO_WARNING)
+
+    # ----- Clip file name format -----
+    filename_format_prop = obs.obs_properties_add_text(
+        props=group_obj,
+        name=PN.PROP_CLIPS_FILENAME_FORMAT,
+        description="File name format",
+        type=obs.OBS_TEXT_DEFAULT
+    )
+    obs.obs_property_set_long_description(
+        filename_format_prop,
+        variables_tip)
 
     t = obs.obs_properties_add_text(
         props=group_obj,
@@ -170,6 +173,66 @@ Example: 00, 01, …, 53</td></tr>
     # ----- Callbacks -----
     obs.obs_property_set_modified_callback(base_path_prop, check_base_path_callback)
     obs.obs_property_set_modified_callback(filename_format_prop, check_filename_template_callback)
+
+
+def setup_video_paths_settings(group_obj):
+    # ----- Video name condition -----
+    filename_condition = obs.obs_properties_add_list(
+        props=group_obj,
+        name=PN.PROP_VIDEOS_FILENAME_CONDITION,
+        description="Video name based on",
+        type=obs.OBS_COMBO_TYPE_RADIO,
+        format=obs.OBS_COMBO_FORMAT_INT
+    )
+    obs.obs_property_list_add_int(
+        p=filename_condition,
+        name="the name of an active app (.exe file name) at the moment of video saving",
+        val=1
+    )
+    obs.obs_property_list_add_int(
+        p=filename_condition,
+        name="the name of an app (.exe file name) that was active most of the time during the video recording",
+        val=2
+    )
+    obs.obs_property_list_add_int(
+        p=filename_condition,
+        name="the name of the current scene",
+        val=3
+    )
+
+    t = obs.obs_properties_add_text(
+        props=group_obj,
+        name=PN.TXT_CLIPS_HOTKEY_TIP,
+        description="You can set up hotkeys for each mode in File -> Settings -> Hotkeys",
+        type=obs.OBS_TEXT_INFO
+    )
+    obs.obs_property_text_set_info_type(t, obs.OBS_TEXT_INFO_WARNING)
+
+    # ----- Video file name format -----
+    filename_format_prop = obs.obs_properties_add_text(
+        props=group_obj,
+        name=PN.PROP_VIDEOS_FILENAME_FORMAT,
+        description="File name format",
+        type=obs.OBS_TEXT_DEFAULT
+    )
+    obs.obs_property_set_long_description(
+        filename_format_prop,
+        variables_tip)
+
+    t = obs.obs_properties_add_text(
+        props=group_obj,
+        name=PN.TXT_CLIPS_FILENAME_FORMAT_ERR,
+        description="<font color=\"red\"><pre> Invalid format!</pre></font>",
+        type=obs.OBS_TEXT_INFO
+    )
+    obs.obs_property_set_visible(t, False)
+
+    # ----- Save to folders checkbox -----
+    obs.obs_properties_add_bool(
+        props=group_obj,
+        name=PN.PROP_VIDEOS_SAVE_TO_FOLDER,
+        description="Create different folders for different video names",
+    )
 
 
 def setup_notifications_settings(group_obj):
@@ -354,6 +417,7 @@ To disable scheduled restarts, set the value to 0.""",
 def script_properties():
     p = obs.obs_properties_create()  # main properties object
     clip_path_gr = obs.obs_properties_create()
+    video_path_gr = obs.obs_properties_create()
     notification_gr = obs.obs_properties_create()
     popup_gr = obs.obs_properties_create()
     custom_names_gr = obs.obs_properties_create()
@@ -374,6 +438,7 @@ def script_properties():
 
     # ----- Groups -----
     obs.obs_properties_add_group(p, PN.GR_CLIPS_PATHS, "Clip path settings", obs.OBS_PROPERTY_GROUP, clip_path_gr)
+    obs.obs_properties_add_group(p, PN.GR_VIDEO_PATHS, "Video path settings", obs.OBS_PROPERTY_GROUP, video_path_gr)
     obs.obs_properties_add_group(p, PN.GR_NOTIFICATIONS, "Sound notifications", obs.OBS_GROUP_CHECKABLE, notification_gr)
     obs.obs_properties_add_group(p, PN.GR_POPUP, "Popup notifications", obs.OBS_GROUP_CHECKABLE, popup_gr)
     obs.obs_properties_add_group(p, PN.GR_CUSTOM_NAMES, "Custom names", obs.OBS_GROUP_NORMAL, custom_names_gr)
@@ -381,6 +446,7 @@ def script_properties():
 
     # ------ Setup properties ------
     setup_clip_paths_settings(clip_path_gr)
+    setup_video_paths_settings(video_path_gr)
     setup_notifications_settings(notification_gr)
     setup_popup_notification_settings(popup_gr)
     setup_custom_names_settings(custom_names_gr)
