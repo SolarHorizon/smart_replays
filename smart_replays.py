@@ -502,13 +502,192 @@ Example: 00, 01, …, 53</td></tr>
     obs.obs_property_set_modified_callback(filename_format_prop, check_filename_template_callback)
 
 
+def setup_notifications_settings(group_obj):
+    notification_success_prop = obs.obs_properties_add_bool(
+        props=group_obj,
+        name=PN.PROP_NOTIFICATION_ON_SUCCESS,
+        description="On success"
+    )
+    success_path_prop = obs.obs_properties_add_path(
+        props=group_obj,
+        name=PN.PROP_NOTIFICATION_ON_SUCCESS_PATH,
+        description="",
+        type=obs.OBS_PATH_FILE,
+        filter=None,
+        default_path="C:\\"
+    )
+
+    notification_failure_prop = obs.obs_properties_add_bool(
+        props=group_obj,
+        name=PN.PROP_NOTIFICATION_ON_FAILURE,
+        description="On failure"
+    )
+    failure_path_prop = obs.obs_properties_add_path(
+        props=group_obj,
+        name=PN.PROP_NOTIFICATION_ON_FAILURE_PATH,
+        description="",
+        type=obs.OBS_PATH_FILE,
+        filter=None,
+        default_path="C:\\"
+    )
+
+    obs.obs_property_set_visible(success_path_prop,
+                                 obs.obs_data_get_bool(VARIABLES.script_settings, PN.PROP_NOTIFICATION_ON_SUCCESS))
+    obs.obs_property_set_visible(failure_path_prop,
+                                 obs.obs_data_get_bool(VARIABLES.script_settings, PN.PROP_NOTIFICATION_ON_FAILURE))
+
+    # ----- Callbacks ------
+    obs.obs_property_set_modified_callback(notification_success_prop, update_notifications_menu_callback)
+    obs.obs_property_set_modified_callback(notification_failure_prop, update_notifications_menu_callback)
+
+
+def setup_popup_notification_settings(group_obj):
+    obs.obs_properties_add_bool(
+        props=group_obj,
+        name=PN.PROP_POPUP_ON_SUCCESS,
+        description="On success"
+    )
+
+    obs.obs_properties_add_bool(
+        props=group_obj,
+        name=PN.PROP_POPUP_ON_FAILURE,
+        description="On failure"
+    )
+
+
+def setup_custom_names_settings(group_obj):
+    obs.obs_properties_add_text(
+        props=group_obj,
+        name=PN.TXT_CUSTOM_NAME_DESC,
+        description="Since the executable name doesn't always match the name of the application/game "
+                    "(e.g. the game is called Deadlock, but the executable is project8.exe), "
+                    "you can set custom names for clips based on the name of the executable / folder "
+                    "where the executable is located.",
+        type=obs.OBS_TEXT_INFO
+    )
+
+    err_text_1 = obs.obs_properties_add_text(
+        props=group_obj,
+        name=PN.TXT_CUSTOM_NAMES_INVALID_CHARACTERS,
+        description="""
+    <div style="font-size: 14px">
+    <span style="color: red">Invalid path or clip name value.<br></span>
+    <span style="color: orange">Clip name cannot contain <code style="color: cyan">&lt; &gt; / \\ | * ? : " %</code> characters.<br>
+    Path cannot contain <code style="color: cyan">&lt; &gt; | * ? " %</code> characters.</span>
+    </div>
+    """,
+        type=obs.OBS_TEXT_INFO
+    )
+
+    err_text_2 = obs.obs_properties_add_text(
+        props=group_obj,
+        name=PN.TXT_CUSTOM_NAMES_PATH_EXISTS,
+        description="""<div style="font-size: 14px; color: red">This path has already been added to the list.</div>""",
+        type=obs.OBS_TEXT_INFO
+    )
+
+    err_text_3 = obs.obs_properties_add_text(
+        props=group_obj,
+        name=PN.TXT_CUSTOM_NAMES_INVALID_FORMAT,
+        description="""
+    <div style="font-size: 14px">
+    <span style="color: red">Invalid format.<br></span>
+    <span style="color: orange">Required format: DISK:\\path\\to\\folder\\or\\executable > ClipName<br></span>
+    <span style="color: lightgreen">Example: C:\\Program Files\\Minecraft > Minecraft</span>
+    </div>""",
+        type=obs.OBS_TEXT_INFO
+    )
+
+    obs.obs_property_set_visible(err_text_1, False)
+    obs.obs_property_set_visible(err_text_2, False)
+    obs.obs_property_set_visible(err_text_3, False)
+
+    custom_names_list = obs.obs_properties_add_editable_list(
+        props=group_obj,
+        name=PN.PROP_CUSTOM_NAMES_LIST,
+        description="",
+        type=obs.OBS_EDITABLE_LIST_TYPE_STRINGS,
+        filter=None,
+        default_path=None
+    )
+
+    t = obs.obs_properties_add_text(
+        props=group_obj,
+        name="temp",
+        description="Format:  DISK:\\path\\to\\folder\\or\\executable > ClipName\n"
+                    f"Example: {sys.executable} > OBS",
+        type=obs.OBS_TEXT_INFO
+    )
+    obs.obs_property_text_set_info_type(t, obs.OBS_TEXT_INFO_WARNING)
+
+    obs.obs_properties_add_path(
+        props=group_obj,
+        name=PN.PROP_CUSTOM_NAMES_IMPORT_PATH,
+        description="",
+        type=obs.OBS_PATH_FILE,
+        filter=None,
+        default_path="C:\\"
+    )
+
+    obs.obs_properties_add_button(
+        group_obj,
+        PN.BTN_CUSTOM_NAMES_IMPORT,
+        "Import custom names",
+        import_custom_names_from_json_callback,
+    )
+
+    obs.obs_properties_add_path(
+        props=group_obj,
+        name=PN.PROP_CUSTOM_NAMES_EXPORT_PATH,
+        description="",
+        type=obs.OBS_PATH_DIRECTORY,
+        filter=None,
+        default_path="C:\\"
+    )
+
+    obs.obs_properties_add_button(
+        group_obj,
+        PN.BTN_CUSTOM_NAMES_EXPORT,
+        "Export custom names",
+        export_custom_names_to_json_callback,
+    )
+
+    # ----- Callbacks -----
+    obs.obs_property_set_modified_callback(custom_names_list, update_custom_names_callback)
+
+
+def setup_other_settings(group_obj):
+    obs.obs_properties_add_text(
+        props=group_obj,
+        name=PN.TXT_RESTART_BUFFER_LOOP,
+        description="""If replay buffering runs too long without a restart, saving clips may become slow, and bugs can occur (thanks, OBS).
+It's recommended to restart it every 1-2 hours (3600-7200 seconds). Before restarting, the script checks OBS's max clip length and detects keyboard or mouse input. If input is detected, the restart is delayed by the max clip length; otherwise, it proceeds immediately.
+To disable scheduled restarts, set the value to 0.""",
+        type=obs.OBS_TEXT_INFO
+    )
+
+    obs.obs_properties_add_int(
+        props=group_obj,
+        name=PN.PROP_RESTART_BUFFER_LOOP,
+        description="Restart every (s)",
+        min=0, max=7200,
+        step=10
+    )
+
+    obs.obs_properties_add_bool(
+        props=group_obj,
+        name=PN.PROP_RESTART_BUFFER,
+        description="Restart replay buffer after clip saving"
+    )
+
+
 def script_properties():
     p = obs.obs_properties_create()  # main properties object
     clip_path_gr = obs.obs_properties_create()
-    notification_props = obs.obs_properties_create()
-    popup_props = obs.obs_properties_create()
-    custom_names_props = obs.obs_properties_create()
-    other_props = obs.obs_properties_create()
+    notification_gr = obs.obs_properties_create()
+    popup_gr = obs.obs_properties_create()
+    custom_names_gr = obs.obs_properties_create()
+    other_gr = obs.obs_properties_create()
 
     # ----- Ungrouped properties -----
     # Updates text
@@ -525,183 +704,18 @@ def script_properties():
 
     # ----- Groups -----
     obs.obs_properties_add_group(p, PN.GR_CLIPS_PATHS, "Clip path settings", obs.OBS_PROPERTY_GROUP, clip_path_gr)
-    obs.obs_properties_add_group(p, PN.GR_NOTIFICATIONS, "Sound notifications", obs.OBS_GROUP_CHECKABLE, notification_props)
-    obs.obs_properties_add_group(p, PN.GR_POPUP, "Popup notifications", obs.OBS_GROUP_CHECKABLE, popup_props)
-    obs.obs_properties_add_group(p, PN.GR_CUSTOM_NAMES, "Custom names", obs.OBS_GROUP_NORMAL, custom_names_props)
-    obs.obs_properties_add_group(p, PN.GR_OTHER, "Other", obs.OBS_GROUP_NORMAL, other_props)
+    obs.obs_properties_add_group(p, PN.GR_NOTIFICATIONS, "Sound notifications", obs.OBS_GROUP_CHECKABLE, notification_gr)
+    obs.obs_properties_add_group(p, PN.GR_POPUP, "Popup notifications", obs.OBS_GROUP_CHECKABLE, popup_gr)
+    obs.obs_properties_add_group(p, PN.GR_CUSTOM_NAMES, "Custom names", obs.OBS_GROUP_NORMAL, custom_names_gr)
+    obs.obs_properties_add_group(p, PN.GR_OTHER, "Other", obs.OBS_GROUP_NORMAL, other_gr)
 
     # ------ Setup properties ------
     setup_clip_paths_settings(clip_path_gr)
+    setup_notifications_settings(notification_gr)
+    setup_popup_notification_settings(popup_gr)
+    setup_custom_names_settings(custom_names_gr)
+    setup_other_settings(other_gr)
 
-    # ------ Notification Settings ------
-    notification_success_prop = obs.obs_properties_add_bool(
-        props=notification_props,
-        name=PN.PROP_NOTIFICATION_ON_SUCCESS,
-        description="On success"
-    )
-    obs.obs_properties_add_path(
-        props=notification_props,
-        name=PN.PROP_NOTIFICATION_ON_SUCCESS_PATH,
-        description="",
-        type=obs.OBS_PATH_FILE,
-        filter=None,
-        default_path="C:\\"
-    )
-
-    notification_failure_prop = obs.obs_properties_add_bool(
-        props=notification_props,
-        name=PN.PROP_NOTIFICATION_ON_FAILURE,
-        description="On failure"
-    )
-    obs.obs_properties_add_path(
-        props=notification_props,
-        name=PN.PROP_NOTIFICATION_ON_FAILURE_PATH,
-        description="",
-        type=obs.OBS_PATH_FILE,
-        filter=None,
-        default_path="C:\\"
-    )
-
-    update_notifications_menu_callback(p, None, VARIABLES.script_settings)
-
-    # ------ Popup notifications ------
-    obs.obs_properties_add_bool(
-        props=popup_props,
-        name=PN.PROP_POPUP_ON_SUCCESS,
-        description="On success"
-    )
-
-    obs.obs_properties_add_bool(
-        props=popup_props,
-        name=PN.PROP_POPUP_ON_FAILURE,
-        description="On failure"
-    )
-    # ------ Custom names settings ------
-    obs.obs_properties_add_text(
-        props=custom_names_props,
-        name=PN.TXT_CUSTOM_NAME_DESC,
-        description="Since the executable name doesn't always match the name of the application/game "
-                    "(e.g. the game is called Deadlock, but the executable is project8.exe), "
-                    "you can set custom names for clips based on the name of the executable / folder "
-                    "where the executable is located.",
-        type=obs.OBS_TEXT_INFO
-    )
-
-    err_text_1 = obs.obs_properties_add_text(
-        props=custom_names_props,
-        name=PN.TXT_CUSTOM_NAMES_INVALID_CHARACTERS,
-        description="""
-<div style="font-size: 14px">
-<span style="color: red">Invalid path or clip name value.<br></span>
-<span style="color: orange">Clip name cannot contain <code style="color: cyan">&lt; &gt; / \\ | * ? : " %</code> characters.<br>
-Path cannot contain <code style="color: cyan">&lt; &gt; | * ? " %</code> characters.</span>
-</div>
-""",
-        type=obs.OBS_TEXT_INFO
-    )
-
-    err_text_2 = obs.obs_properties_add_text(
-        props=custom_names_props,
-        name=PN.TXT_CUSTOM_NAMES_PATH_EXISTS,
-        description="""<div style="font-size: 14px; color: red">This path has already been added to the list.</div>""",
-        type=obs.OBS_TEXT_INFO
-    )
-
-    err_text_3 = obs.obs_properties_add_text(
-        props=custom_names_props,
-        name=PN.TXT_CUSTOM_NAMES_INVALID_FORMAT,
-        description="""
-<div style="font-size: 14px">
-<span style="color: red">Invalid format.<br></span>
-<span style="color: orange">Required format: DISK:\\path\\to\\folder\\or\\executable > ClipName<br></span>
-<span style="color: lightgreen">Example: C:\\Program Files\\Minecraft > Minecraft</span>
-</div>""",
-        type=obs.OBS_TEXT_INFO
-    )
-
-    obs.obs_property_set_visible(err_text_1, False)
-    obs.obs_property_set_visible(err_text_2, False)
-    obs.obs_property_set_visible(err_text_3, False)
-
-    custom_names_list = obs.obs_properties_add_editable_list(
-        props=custom_names_props,
-        name=PN.PROP_CUSTOM_NAMES_LIST,
-        description="",
-        type=obs.OBS_EDITABLE_LIST_TYPE_STRINGS,
-        filter=None,
-        default_path=None
-    )
-
-    t = obs.obs_properties_add_text(
-        props=custom_names_props,
-        name="temp",
-        description="Format:  DISK:\\path\\to\\folder\\or\\executable > ClipName\n"
-                    f"Example: {sys.executable} > OBS",
-        type=obs.OBS_TEXT_INFO
-    )
-    obs.obs_property_text_set_info_type(t, obs.OBS_TEXT_INFO_WARNING)
-
-    obs.obs_properties_add_path(
-        props=custom_names_props,
-        name=PN.PROP_CUSTOM_NAMES_IMPORT_PATH,
-        description="",
-        type=obs.OBS_PATH_FILE,
-        filter=None,
-        default_path="C:\\"
-    )
-
-    obs.obs_properties_add_button(
-        custom_names_props,
-        PN.BTN_CUSTOM_NAMES_IMPORT,
-        "Import custom names",
-        import_custom_names_from_json_callback,
-    )
-
-    obs.obs_properties_add_path(
-        props=custom_names_props,
-        name=PN.PROP_CUSTOM_NAMES_EXPORT_PATH,
-        description="",
-        type=obs.OBS_PATH_DIRECTORY,
-        filter=None,
-        default_path="C:\\"
-    )
-
-    obs.obs_properties_add_button(
-        custom_names_props,
-        PN.BTN_CUSTOM_NAMES_EXPORT,
-        "Export custom names",
-        export_custom_names_to_json_callback,
-    )
-
-    # ------ Other ------
-    obs.obs_properties_add_text(
-        props=other_props,
-        name=PN.TXT_RESTART_BUFFER_LOOP,
-        description="""If you don't restart replay buffering for a long time, saving clips can take a very long time and other bugs can happen (thanks, OBS).
-It is recommended to keep the value within 1-2 hours (3600-7200 seconds).
-Before a scheduled restart of replay buffering, script looks at the max clip length in the OBS settings and checks if keyboard or mouse input was made at that time. If input was made, the restart will be delayed for the time of max clip length, otherwise it restarts replay baffering.
-If you want to disable scheduled restart of replay buffering, set the value to 0.
-""",
-        type=obs.OBS_TEXT_INFO
-    )
-
-    obs.obs_properties_add_int(
-        props=other_props,
-        name=PN.PROP_RESTART_BUFFER_LOOP,
-        description="Restart every (s)",
-        min=0, max=7200,
-        step=10
-    )
-
-    obs.obs_properties_add_bool(
-        props=other_props,
-        name=PN.PROP_RESTART_BUFFER,
-        description="Restart replay buffer after clip saving"
-    )
-
-    obs.obs_property_set_modified_callback(notification_success_prop, update_notifications_menu_callback)
-    obs.obs_property_set_modified_callback(notification_failure_prop, update_notifications_menu_callback)
-    obs.obs_property_set_modified_callback(custom_names_list, update_custom_names_callback)
     return p
 
 
