@@ -12,7 +12,7 @@
 #  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 #  GNU Affero General Public License for more details.
 
-from .globals import script_settings, PN
+from .globals import VARIABLES, PN
 from .properties_callbacks import (open_github_callback,
                                    update_notifications_menu_callback,
                                    import_custom_names_from_json_callback,
@@ -25,33 +25,10 @@ import obspython as obs
 import sys
 
 
-def script_properties():
-    p = obs.obs_properties_create()  # main p
-    paths_props = obs.obs_properties_create()
-    notification_props = obs.obs_properties_create()
-    popup_props = obs.obs_properties_create()
-    custom_names_props = obs.obs_properties_create()
-    other_props = obs.obs_properties_create()
-
-    # Like btn
-    obs.obs_properties_add_button(
-        p,
-        "like_btn",
-        "🌟 Like this script? Star it! 🌟",
-        open_github_callback
-    )
-
-    # ------ Groups ------
-    obs.obs_properties_add_group(p, PN.GR_PATHS, "Paths settings", obs.OBS_PROPERTY_GROUP, paths_props)
-    obs.obs_properties_add_group(p, PN.GR_NOTIFICATIONS, "Sound notifications", obs.OBS_GROUP_CHECKABLE, notification_props)
-    obs.obs_properties_add_group(p, PN.GR_POPUP, "Popup notifications", obs.OBS_GROUP_CHECKABLE, popup_props)
-    obs.obs_properties_add_group(p, PN.GR_CUSTOM_NAMES, "Custom names", obs.OBS_GROUP_NORMAL, custom_names_props)
-    obs.obs_properties_add_group(p, PN.GR_OTHER, "Other", obs.OBS_GROUP_NORMAL, other_props)
-
-    # ------ Paths settings ------
-    # Base path
+def setup_clip_paths_settings(group_obj):
+    # ----- Clips base path -----
     base_path_prop = obs.obs_properties_add_path(
-        props=paths_props,
+        props=group_obj,
         name=PN.PROP_CLIPS_BASE_PATH,
         description="Base path for clips",
         type=obs.OBS_PATH_DIRECTORY,
@@ -59,7 +36,7 @@ def script_properties():
         default_path="C:\\"
     )
     t = obs.obs_properties_add_text(
-        props=paths_props,
+        props=group_obj,
         name=PN.TEXT_BASE_PATH_INFO,
         description="The path must be on the same disk as the path for OBS records "
                     "(File -> Settings -> Output -> Recording -> Recording Path).\n"
@@ -68,9 +45,9 @@ def script_properties():
     )
     obs.obs_property_text_set_info_type(t, obs.OBS_TEXT_INFO_WARNING)
 
-    # Filename condition
+    # ----- Clips name condition -----
     filename_condition = obs.obs_properties_add_list(
-        props=paths_props,
+        props=group_obj,
         name=PN.PROP_CLIPS_FILENAME_CONDITION,
         description="Clip name depends on",
         type=obs.OBS_COMBO_TYPE_RADIO,
@@ -93,16 +70,16 @@ def script_properties():
     )
 
     t = obs.obs_properties_add_text(
-        props=paths_props,
-        name = PN.TXT_CLIPS_HOTKEY_TIP,
-        description="You can customize hotkeys for each mode in File -> Settings -> Hotkeys",
+        props=group_obj,
+        name=PN.TXT_CLIPS_HOTKEY_TIP,
+        description="You can set up hotkeys for each mode in File -> Settings -> Hotkeys",
         type=obs.OBS_TEXT_INFO
     )
     obs.obs_property_text_set_info_type(t, obs.OBS_TEXT_INFO_WARNING)
 
-    # Filename format
+    # ----- Clip file name format -----
     filename_format_prop = obs.obs_properties_add_text(
-        props=paths_props,
+        props=group_obj,
         name=PN.PROP_CLIPS_FILENAME_FORMAT,
         description="File name format",
         type=obs.OBS_TEXT_DEFAULT
@@ -175,20 +152,56 @@ Example: 00, 01, …, 53</td></tr>
 <tr><th align='left'>%%</th><td> - A literal '%' character.</td></tr>
 </table>""")
 
-    filename_format_err_text = obs.obs_properties_add_text(
-        props=paths_props,
+    t = obs.obs_properties_add_text(
+        props=group_obj,
         name=PN.TXT_CLIPS_FILENAME_FORMAT_ERR,
         description="<font color=\"red\"><pre> Invalid format!</pre></font>",
         type=obs.OBS_TEXT_INFO
     )
-    obs.obs_property_set_visible(filename_format_err_text, False)
+    obs.obs_property_set_visible(t, False)
 
-    # Save to folders
+    # ----- Save to folders checkbox -----
     obs.obs_properties_add_bool(
-        props=paths_props,
+        props=group_obj,
         name=PN.PROP_CLIPS_SAVE_TO_FOLDER,
         description="Create different folders for different clip names",
     )
+
+    # ----- Callbacks -----
+    obs.obs_property_set_modified_callback(base_path_prop, check_base_path_callback)
+    obs.obs_property_set_modified_callback(filename_format_prop, check_filename_template_callback)
+
+
+def script_properties():
+    p = obs.obs_properties_create()  # main properties object
+    clip_path_gr = obs.obs_properties_create()
+    notification_props = obs.obs_properties_create()
+    popup_props = obs.obs_properties_create()
+    custom_names_props = obs.obs_properties_create()
+    other_props = obs.obs_properties_create()
+
+    # ----- Ungrouped properties -----
+    # Updates text
+    t = obs.obs_properties_add_text(p, 'check_updates', 'New update available', obs.OBS_TEXT_INFO)
+    obs.obs_property_set_visible(t, VARIABLES.update_available)
+
+    # Like btn
+    obs.obs_properties_add_button(
+        p,
+        "like_btn",
+        "🌟 Like this script? Star it! 🌟",
+        open_github_callback
+    )
+
+    # ----- Groups -----
+    obs.obs_properties_add_group(p, PN.GR_CLIPS_PATHS, "Clip path settings", obs.OBS_PROPERTY_GROUP, clip_path_gr)
+    obs.obs_properties_add_group(p, PN.GR_NOTIFICATIONS, "Sound notifications", obs.OBS_GROUP_CHECKABLE, notification_props)
+    obs.obs_properties_add_group(p, PN.GR_POPUP, "Popup notifications", obs.OBS_GROUP_CHECKABLE, popup_props)
+    obs.obs_properties_add_group(p, PN.GR_CUSTOM_NAMES, "Custom names", obs.OBS_GROUP_NORMAL, custom_names_props)
+    obs.obs_properties_add_group(p, PN.GR_OTHER, "Other", obs.OBS_GROUP_NORMAL, other_props)
+
+    # ------ Setup properties ------
+    setup_clip_paths_settings(clip_path_gr)
 
     # ------ Notification Settings ------
     notification_success_prop = obs.obs_properties_add_bool(
@@ -219,7 +232,7 @@ Example: 00, 01, …, 53</td></tr>
         default_path="C:\\"
     )
 
-    update_notifications_menu_callback(p, None, script_settings)
+    update_notifications_menu_callback(p, None, VARIABLES.script_settings)
 
     # ------ Popup notifications ------
     obs.obs_properties_add_bool(
@@ -356,9 +369,7 @@ If you want to disable scheduled restart of replay buffering, set the value to 0
         description="Restart replay buffer after clip saving"
     )
 
-    obs.obs_property_set_modified_callback(base_path_prop, check_base_path_callback)  # type: ignore
-    obs.obs_property_set_modified_callback(filename_format_prop, check_filename_template_callback)  # type: ignore
-    obs.obs_property_set_modified_callback(notification_success_prop, update_notifications_menu_callback)  # type: ignore
-    obs.obs_property_set_modified_callback(notification_failure_prop, update_notifications_menu_callback)  # type: ignore
-    obs.obs_property_set_modified_callback(custom_names_list, update_custom_names_callback)  # type: ignore
+    obs.obs_property_set_modified_callback(notification_success_prop, update_notifications_menu_callback)
+    obs.obs_property_set_modified_callback(notification_failure_prop, update_notifications_menu_callback)
+    obs.obs_property_set_modified_callback(custom_names_list, update_custom_names_callback)
     return p

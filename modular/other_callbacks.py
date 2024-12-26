@@ -13,7 +13,7 @@
 #  GNU Affero General Public License for more details.
 
 
-from .globals import clip_exe_history, video_exe_history
+from .globals import VARIABLES
 from .obs_related import get_replay_buffer_max_time, restart_replay_buffering
 from .tech import get_time_since_last_input, get_active_window_pid, get_executable_path, _print
 
@@ -58,8 +58,8 @@ def append_clip_exe_history():
     except:
         return
 
-    if clip_exe_history is not None:
-        clip_exe_history.appendleft(Path(exe))
+    if VARIABLES.clip_exe_history is not None:
+        VARIABLES.clip_exe_history.appendleft(Path(exe))
         # _print(f"{exe} added to exe history.")
 
 
@@ -73,11 +73,11 @@ def append_video_exe_history():
     except:
         return
 
-    if video_exe_history is None:
+    if VARIABLES.video_exe_history is None:
         return
 
     path = Path(exe)
-    if path not in video_exe_history:
-        video_exe_history[path] = 1
+    if path not in VARIABLES.video_exe_history:
+        VARIABLES.video_exe_history[path] = 1
     else:
-        video_exe_history[path] += 1
+        VARIABLES.video_exe_history[path] += 1

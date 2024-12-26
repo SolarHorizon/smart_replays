@@ -12,14 +12,14 @@
 #  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 #  GNU Affero General Public License for more details.
 
-from .globals import (script_settings,
-                      clip_exe_history,
+from .globals import (VARIABLES,
                       DEFAULT_CUSTOM_NAMES,
                       PATH_PROHIBITED_CHARS,
                       FILENAME_PROHIBITED_CHARS,
                       PN)
 
 from .exceptions import CustomNameInvalidFormat, CustomNameInvalidCharacters, CustomNamePathAlreadyExists
+from .globals import ConfigTypes
 from .obs_related import get_obs_config
 from .tech import play_sound, _print
 
@@ -33,38 +33,37 @@ def notify(success: bool, clip_path: str):
     """
     Plays and shows success / failure notification if it's enabled in notifications settings.
     """
-    sound_notifications = obs.obs_data_get_bool(script_settings, PN.GR_NOTIFICATIONS)
-    popup_notifications = obs.obs_data_get_bool(script_settings, PN.GR_POPUP)
-    python_exe = os.path.join(get_obs_config("Python", "Path64bit", str, True), "pythonw.exe")
+    sound_notifications = obs.obs_data_get_bool(VARIABLES.script_settings, PN.GR_NOTIFICATIONS)
+    popup_notifications = obs.obs_data_get_bool(VARIABLES.script_settings, PN.GR_POPUP)
+    python_exe = os.path.join(get_obs_config("Python", "Path64bit", str, ConfigTypes.APP), "pythonw.exe")
 
     if success:
-        if sound_notifications and obs.obs_data_get_bool(script_settings, PN.PROP_NOTIFICATION_ON_SUCCESS):
-            path = obs.obs_data_get_string(script_settings, PN.PROP_NOTIFICATION_ON_SUCCESS_PATH)
+        if sound_notifications and obs.obs_data_get_bool(VARIABLES.script_settings, PN.PROP_NOTIFICATION_ON_SUCCESS):
+            path = obs.obs_data_get_string(VARIABLES.script_settings, PN.PROP_NOTIFICATION_ON_SUCCESS_PATH)
             play_sound(path)
 
-        if popup_notifications and obs.obs_data_get_bool(script_settings, PN.PROP_POPUP_ON_SUCCESS):
+        if popup_notifications and obs.obs_data_get_bool(VARIABLES.script_settings, PN.PROP_POPUP_ON_SUCCESS):
             subprocess.Popen([python_exe, __file__, "Clip saved", f"Clip saved to {clip_path}"])
     else:
-        if sound_notifications and obs.obs_data_get_bool(script_settings, PN.PROP_NOTIFICATION_ON_FAILURE):
-            path = obs.obs_data_get_string(script_settings, PN.PROP_NOTIFICATION_ON_FAILURE_PATH)
+        if sound_notifications and obs.obs_data_get_bool(VARIABLES.script_settings, PN.PROP_NOTIFICATION_ON_FAILURE):
+            path = obs.obs_data_get_string(VARIABLES.script_settings, PN.PROP_NOTIFICATION_ON_FAILURE_PATH)
             play_sound(path)
 
-        if popup_notifications and obs.obs_data_get_bool(script_settings, PN.PROP_POPUP_ON_FAILURE):
+        if popup_notifications and obs.obs_data_get_bool(VARIABLES.script_settings, PN.PROP_POPUP_ON_FAILURE):
             subprocess.Popen([python_exe, __file__, "Clip not saved", f"More in the logs.", "#C00000"])
 
 
-def load_custom_names(data_dict: dict):
+def load_custom_names(script_settings_dict: dict):
     """
     Loads custom names to global custom_name variable.
     Raises exception if path or name are invalid.
 
-    :param data_dict: Script settings as dict.
+    :param script_settings_dict: Script settings as dict.
     """
     _print("Loading custom names...")
 
-    global custom_names
     new_custom_names = {}
-    custom_names_list = data_dict.get(PN.PROP_CUSTOM_NAMES_LIST)
+    custom_names_list = script_settings_dict.get(PN.PROP_CUSTOM_NAMES_LIST)
     if custom_names_list is None:
         custom_names_list = DEFAULT_CUSTOM_NAMES
 
@@ -85,5 +84,5 @@ def load_custom_names(data_dict: dict):
 
         new_custom_names[Path(path)] = name
 
-    custom_names = new_custom_names
-    _print(f"{len(custom_names)} custom names are loaded.")
+    VARIABLES.custom_names = new_custom_names
+    _print(f"{len(VARIABLES.custom_names)} custom names are loaded.")

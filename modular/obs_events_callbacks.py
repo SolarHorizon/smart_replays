@@ -12,7 +12,7 @@
 #  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 #  GNU Affero General Public License for more details.
 
-from .globals import clip_exe_history, video_exe_history, script_settings, PN, FORCE_MODE_LOCK
+from .globals import VARIABLES, PN, FORCE_MODE_LOCK
 from .tech import _print
 from .obs_related import get_replay_buffer_max_time, restart_replay_buffering
 from .script_helpers import notify
@@ -25,6 +25,7 @@ from threading import Thread
 import traceback
 
 
+# noinspection PyUnresolvedReferences
 def on_buffer_recording_started_callback(event):
     """
     Resets and starts recording executables history.
@@ -34,14 +35,13 @@ def on_buffer_recording_started_callback(event):
         return
 
     # Reset and restart exe history
-    global clip_exe_history
     replay_max_size = get_replay_buffer_max_time()
-    clip_exe_history = deque([], maxlen=replay_max_size)
-    _print(f"Exe history deque created. Maxlen={clip_exe_history.maxlen}.")
+    VARIABLES.clip_exe_history = deque([], maxlen=replay_max_size)
+    _print(f"Exe history deque created. Maxlen={VARIABLES.clip_exe_history.maxlen}.")
     obs.timer_add(append_clip_exe_history, 1000)
 
     # Start replay buffer auto restart loop.
-    if restart_loop_time := obs.obs_data_get_int(script_settings, PN.PROP_RESTART_BUFFER_LOOP):
+    if restart_loop_time := obs.obs_data_get_int(VARIABLES.script_settings, PN.PROP_RESTART_BUFFER_LOOP):
         obs.timer_add(restart_replay_buffering_callback, restart_loop_time * 1000)
 
 
@@ -55,25 +55,24 @@ def on_buffer_recording_stopped_callback(event):
 
     obs.timer_remove(append_clip_exe_history)
     obs.timer_remove(restart_replay_buffering_callback)
-    clip_exe_history.clear()
+    VARIABLES.clip_exe_history.clear()
 
 
 def on_buffer_save_callback(event):
     if event is not obs.OBS_FRONTEND_EVENT_REPLAY_BUFFER_SAVED:
         return
 
-    global force_mode
     _print("------ SAVING BUFFER HANDLER ------")
     try:
-        clip_name, path = save_buffer(mode=force_mode)
-        if obs.obs_data_get_bool(script_settings, PN.PROP_RESTART_BUFFER):
+        clip_name, path = save_buffer(mode=VARIABLES.force_mode)
+        if obs.obs_data_get_bool(VARIABLES.script_settings, PN.PROP_RESTART_BUFFER):
             # IMPORTANT
             # I don't know why, but it seems like stopping and starting replay buffering should be in the separate thread.
             # Otherwise it can "stuck" on stopping.
             Thread(target=restart_replay_buffering, daemon=True).start()
 
-        if force_mode:
-            force_mode = 0
+        if VARIABLES.force_mode:
+            VARIABLES.force_mode = 0
             FORCE_MODE_LOCK.release()
         notify(True, str(path))
     except:
@@ -87,8 +86,7 @@ def on_video_recording_started_callback(event):
     if event is not obs.OBS_FRONTEND_EVENT_RECORDING_STARTED:
         return
 
-    global video_exe_history
-    video_exe_history = {}
+    VARIABLES.video_exe_history = {}
     obs.timer_add(append_video_exe_history, 1000)
 
 
@@ -105,7 +103,6 @@ def on_video_recording_stopped_callback(event):
 
     # todo: save video into new location
 
-    global video_exe_history
-    video_exe_history = None
+    VARIABLES.video_exe_history = None
 
     _print(obs.obs_frontend_get_last_recording())

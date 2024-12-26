@@ -16,7 +16,7 @@ from .exceptions import (CustomNameInvalidCharacters,
                          CustomNameInvalidFormat,
                          CustomNamePathAlreadyExists,
                          CustomNameParsingError)
-from .globals import script_settings, PN, DEFAULT_CUSTOM_NAMES
+from .globals import VARIABLES, PN, DEFAULT_CUSTOM_NAMES
 from .clipname_gen import format_filename
 from .obs_related import get_base_path
 from .script_helpers import load_custom_names
@@ -145,7 +145,7 @@ def import_custom_names_from_json_callback(*args):
     """
     Imports custom names from JSON file.
     """
-    path = obs.obs_data_get_string(script_settings, PN.PROP_CUSTOM_NAMES_IMPORT_PATH)
+    path = obs.obs_data_get_string(VARIABLES.script_settings, PN.PROP_CUSTOM_NAMES_IMPORT_PATH)
     if not path or not os.path.exists(path) or not os.path.isfile(path):
         return False
 
@@ -162,7 +162,7 @@ def import_custom_names_from_json_callback(*args):
         item = obs.obs_data_create_from_json(json.dumps(i))
         obs.obs_data_array_insert(arr, index, item)
 
-    obs.obs_data_set_array(script_settings, PN.PROP_CUSTOM_NAMES_LIST, arr)
+    obs.obs_data_set_array(VARIABLES.script_settings, PN.PROP_CUSTOM_NAMES_LIST, arr)
     return True
 
 
@@ -170,11 +170,11 @@ def export_custom_names_to_json_callback(*args):
     """
     Exports custom names to JSON file.
     """
-    path = obs.obs_data_get_string(script_settings, PN.PROP_CUSTOM_NAMES_EXPORT_PATH)
+    path = obs.obs_data_get_string(VARIABLES.script_settings, PN.PROP_CUSTOM_NAMES_EXPORT_PATH)
     if not path or not os.path.exists(path) or not os.path.isdir(path):
         return False
 
-    custom_names_dict = json.loads(obs.obs_data_get_last_json(script_settings))
+    custom_names_dict = json.loads(obs.obs_data_get_last_json(VARIABLES.script_settings))
     custom_names_dict = custom_names_dict.get(PN.PROP_CUSTOM_NAMES_LIST) or DEFAULT_CUSTOM_NAMES
 
     with open(os.path.join(path, "obs_smart_replays_custom_names.json"), "w") as f:

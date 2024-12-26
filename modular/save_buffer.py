@@ -12,7 +12,7 @@
 #  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 #  GNU Affero General Public License for more details.
 
-from .globals import script_settings, FORCE_MODE_LOCK, PN
+from .globals import VARIABLES, FORCE_MODE_LOCK, PN
 from .obs_related import get_last_replay_file_name, get_base_path
 from .clipname_gen import gen_clip_base_name, format_filename, add_duplicate_suffix
 from .tech import _print
@@ -34,7 +34,7 @@ def save_buffer(mode: int = 0) -> tuple[str, Path]:
     filename = format_filename(clip_name, dt) + f".{ext}"
 
     new_folder = Path(get_base_path())
-    if obs.obs_data_get_bool(script_settings, PN.PROP_CLIPS_SAVE_TO_FOLDER):
+    if obs.obs_data_get_bool(VARIABLES.script_settings, PN.PROP_CLIPS_SAVE_TO_FOLDER):
         new_folder = new_folder.joinpath(clip_name)
 
     os.makedirs(str(new_folder), exist_ok=True)
@@ -59,6 +59,5 @@ def save_buffer_with_force_mode(mode: int):
         return
 
     FORCE_MODE_LOCK.acquire()
-    global force_mode
-    force_mode = mode
+    VARIABLES.force_mode = mode
     obs.obs_frontend_replay_buffer_save()

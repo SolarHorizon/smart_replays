@@ -13,7 +13,7 @@
 #  GNU Affero General Public License for more details.
 
 
-from .globals import PN, hotkey_ids, script_settings
+from .globals import PN, VARIABLES
 from .save_buffer import save_buffer_with_force_mode
 
 import obspython as obs
@@ -32,11 +32,11 @@ def load_hotkeys():
                                               "[Smart Replays] Save buffer (force mode 3)",
                                               lambda pressed: save_buffer_with_force_mode(3) if pressed else None)
 
-    hotkey_ids.update({PN.HK_SAVE_BUFFER_MODE_1: hk1_id,
-                       PN.HK_SAVE_BUFFER_MODE_2: hk2_id,
-                       PN.HK_SAVE_BUFFER_MODE_3: hk3_id})
+    VARIABLES.hotkey_ids.update({PN.HK_SAVE_BUFFER_MODE_1: hk1_id,
+                                 PN.HK_SAVE_BUFFER_MODE_2: hk2_id,
+                                 PN.HK_SAVE_BUFFER_MODE_3: hk3_id})
 
-    for key_name in hotkey_ids:
-        key_data = obs.obs_data_get_array(script_settings, key_name)
-        obs.obs_hotkey_load(hotkey_ids[key_name], key_data)
+    for key_name in VARIABLES.hotkey_ids:
+        key_data = obs.obs_data_get_array(VARIABLES.script_settings, key_name)
+        obs.obs_hotkey_load(VARIABLES.hotkey_ids[key_name], key_data)
         obs.obs_data_array_release(key_data)

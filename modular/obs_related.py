@@ -12,7 +12,7 @@
 #  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 #  GNU Affero General Public License for more details.
 
-from .globals import script_settings, PN
+from .globals import VARIABLES, PN, ConfigTypes, OBS_VERSION
 from .tech import _print
 
 import obspython as obs
@@ -22,7 +22,7 @@ import time
 def get_obs_config(section_name: str | None = None,
                    param_name: str | None = None,
                    value_type: type[str, int, bool, float] = str,
-                   global_config: bool = False):
+                   config_type: ConfigTypes = ConfigTypes.PROFILE):
     """
     Gets a value from OBS config.
     If the value is not set, it will use the default value. If there is no default value, it will return NULL.
@@ -31,11 +31,20 @@ def get_obs_config(section_name: str | None = None,
     :param section_name: Section name. If not specified, returns the OBS config.
     :param param_name: Parameter name. If not specified, returns the OBS config.
     :param value_type: Type of value (str, int, bool, float).
-    :param global_config: Search in global config or profile config?
+    :param config_type: Which config search in? (global / profile / user (obs v31 or higher)
     """
-    cfg = obs.obs_frontend_get_global_config() if global_config else obs.obs_frontend_get_profile_config()
+    if config_type is ConfigTypes.PROFILE:
+        cfg = obs.obs_frontend_get_profile_config()
+    elif config_type is ConfigTypes.APP:
+        cfg = obs.obs_frontend_get_global_config()
+    else:
+        if OBS_VERSION[0] < 31:
+            cfg = obs.obs_frontend_get_global_config()
+        else:
+            cfg = obs.obs_frontend_get_user_config()
 
-    if not (section_name and param_name):
+
+    if not section_name or not param_name:
         return cfg
 
     functions = {
@@ -46,8 +55,7 @@ def get_obs_config(section_name: str | None = None,
     }
 
     if value_type not in functions.keys():
-        raise ValueError(f'Can\'t get value of {param_name} from section {section_name}: '
-                         f'unsupported value type {value_type.__class__.__name__}')
+        raise ValueError("Unsupported type.")
 
     return functions[value_type](cfg, section_name, param_name)
 
@@ -84,7 +92,7 @@ def get_base_path(from_obs_config: bool = False) -> str:
         It's True only on script launch and only if there is no value in script config.
     """
     if not from_obs_config:
-        script_path = obs.obs_data_get_string(script_settings, PN.PROP_CLIPS_BASE_PATH)
+        script_path = obs.obs_data_get_string(VARIABLES.script_settings, PN.PROP_CLIPS_BASE_PATH)
         # If PN.PROP_CLIPS_BASE_PATH is not saved in the script config, then it has a default value,
         # which is the value from the OBS config.
         if script_path:

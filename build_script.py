@@ -135,6 +135,7 @@ def find_imports(file_name: str) -> tuple[Imports, int]:
 FILES_ORDER = ['ui',
                'globals',
                'exceptions',
+               'updates_check',
                'properties',
                'properties_callbacks',
                'tech',

@@ -12,8 +12,7 @@
 #  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 #  GNU Affero General Public License for more details.
 
-from .globals import (hotkey_ids,
-                      script_settings,
+from .globals import (VARIABLES,
                       VERSION,
                       DEFAULT_FILENAME_FORMAT,
                       DEFAULT_CUSTOM_NAMES, PN)
@@ -27,9 +26,9 @@ from .obs_events_callbacks import (on_buffer_save_callback,
                                    on_video_recording_started_callback,
                                    on_video_recording_stopping_callback,
                                    on_video_recording_stopped_callback)
-
+from .updates_check import check_updates
+from .globals import VERSION
 from .script_helpers import load_custom_names
-
 from .hotkeys import load_hotkeys
 
 import obspython as obs
@@ -59,27 +58,26 @@ def script_defaults(s):
 def script_update(settings):
     _print("Updating script...")
 
-    global script_settings
-    script_settings = settings
-    _print(obs.obs_data_get_json(script_settings))
+    VARIABLES.script_settings = settings
+    _print(obs.obs_data_get_json(VARIABLES.script_settings))
     _print("Script updated")
 
 
 def script_save(settings):
     _print("Saving script...")
 
-    for key_name in hotkey_ids:
-        k = obs.obs_hotkey_save(hotkey_ids[key_name])
+    for key_name in VARIABLES.hotkey_ids:
+        k = obs.obs_hotkey_save(VARIABLES.hotkey_ids[key_name])
         obs.obs_data_set_array(settings, key_name, k)
     _print("Script saved")
 
 
-def script_load(data):
+def script_load(script_settings):
     _print("Loading script...")
-    global script_settings
-    script_settings = data
+    VARIABLES.script_settings = script_settings
+    VARIABLES.update_available = check_updates(VERSION)
 
-    json_settings = json.loads(obs.obs_data_get_json(data))
+    json_settings = json.loads(obs.obs_data_get_json(script_settings))
     load_custom_names(json_settings)
 
     obs.obs_frontend_add_event_callback(on_buffer_save_callback)
@@ -88,7 +86,7 @@ def script_load(data):
 
     obs.obs_frontend_add_event_callback(on_video_recording_started_callback)
     obs.obs_frontend_add_event_callback(on_video_recording_stopping_callback)
-    obs.obs_frontend_add_event_callback(on_video_recording_started_callback)
+    obs.obs_frontend_add_event_callback(on_video_recording_stopped_callback)
     load_hotkeys()
 
     if obs.obs_frontend_replay_buffer_active():
