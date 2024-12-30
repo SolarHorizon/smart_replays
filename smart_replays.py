@@ -28,6 +28,7 @@ from ctypes import wintypes
 from datetime import datetime
 from collections import deque
 from threading import Lock, Thread
+from packaging.version import Version
 from enum import Enum
 
 import tkinter as tk
@@ -174,9 +175,10 @@ if __name__ == '__main__':
 
 
 # ------------- OBS Script ----------------
-VERSION = "1.0.2"
+VERSION = "1.0.3"
 OBS_VERSION_STRING = obs.obs_get_version_string()
-OBS_VERSION = [int(i) for i in OBS_VERSION_STRING.split('.')]
+OBS_VERSION = Version(OBS_VERSION_STRING)
+
 FORCE_MODE_LOCK = Lock()
 NAME_PROHIBITED_CHARS = r'/\:"<>*?|%'
 PATH_PROHIBITED_CHARS = r'"<>*?|%'
@@ -844,7 +846,7 @@ def get_obs_config(section_name: str | None = None,
     elif config_type is ConfigTypes.APP:
         cfg = obs.obs_frontend_get_global_config()
     else:
-        if OBS_VERSION[0] < 31:
+        if OBS_VERSION.major < 31:
             cfg = obs.obs_frontend_get_global_config()
         else:
             cfg = obs.obs_frontend_get_user_config()
