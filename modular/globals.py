@@ -24,7 +24,8 @@ import obspython as obs
 VERSION = "1.0.2"
 OBS_VERSION_STRING = obs.obs_get_version_string()
 OBS_VERSION = (int(i) for i in OBS_VERSION_STRING.split('.'))
-FORCE_MODE_LOCK = Lock()
+CLIPS_FORCE_MODE_LOCK = Lock()
+VIDEOS_FORCE_MODE_LOCK = Lock()
 FILENAME_PROHIBITED_CHARS = r'/\:"<>*?|%'
 PATH_PROHIBITED_CHARS = r'"<>*?|%'
 DEFAULT_FILENAME_FORMAT = "%NAME_%d.%m.%Y_%H-%M-%S"
@@ -39,6 +40,7 @@ class VARIABLES:
     update_available: bool = False
     clip_exe_history: deque[Path, ...] | None = None
     video_exe_history: dict[Path, int] | None = None  # {Path(path/to/executable): active_seconds_amount
+    exe_path_on_video_sopping: Path | None = None
     custom_names: dict[Path, str] = {}
     script_settings = None
     hotkey_ids: dict = {}
@@ -52,15 +54,15 @@ class ConfigTypes(Enum):
 
 
 class ClipNamingModes(Enum):
-    CURRENT_PROCESS = 0
-    MOST_RECORDED_PROCESS = 1
-    CURRENT_SCENE = 2
+    CURRENT_PROCESS = 1
+    MOST_RECORDED_PROCESS = 2
+    CURRENT_SCENE = 3
 
 
 class VideoNamingModes(Enum):
-    CURRENT_PROCESS = 0
-    MOST_RECORDED_PROCESS = 1
-    CURRENT_SCENE = 2
+    CURRENT_PROCESS = 1
+    MOST_RECORDED_PROCESS = 2
+    CURRENT_SCENE = 3
 
 
 class PropertiesNames:
@@ -75,27 +77,35 @@ class PropertiesNames:
     # Clips path settings
     PROP_CLIPS_BASE_PATH = "clips_base_path"
     TEXT_BASE_PATH_INFO = "base_path_info"
-    PROP_CLIPS_FILENAME_CONDITION = "clips_filename_condition"
+    PROP_CLIPS_NAMING_MODE = "clips_naming_mode"
     TXT_CLIPS_HOTKEY_TIP = "clips_hotkey_tip"
     PROP_CLIPS_FILENAME_FORMAT = "clips_filename_format"
     TXT_CLIPS_FILENAME_FORMAT_ERR = "clips_filename_format_err"
     PROP_CLIPS_SAVE_TO_FOLDER = "clips_save_to_folder"
 
     # Videos path settings
-    PROP_VIDEOS_FILENAME_CONDITION = "videos_filename_condition"
+    PROP_VIDEOS_NAMING_MODE = "video_naming_mode"
     TXT_VIDEOS_HOTKEY_TIP = "videos_hotkey_tip"
     PROP_VIDEOS_FILENAME_FORMAT = "videos_filename_format"
+    TXT_VIDEOS_FILENAME_FORMAT_ERR = "videos_filename_format_err"
     PROP_VIDEOS_SAVE_TO_FOLDER = "videos_save_to_folder"
+    PROP_VIDEOS_ONLY_FORCE_MODE = "videos_only_force_mode"
 
     # Sound notification settings
-    PROP_NOTIFICATION_ON_SUCCESS = "notification_on_success"
-    PROP_NOTIFICATION_ON_SUCCESS_PATH = "notification_on_success_file"
-    PROP_NOTIFICATION_ON_FAILURE = "notification_on_failure"
-    PROP_NOTIFICATION_ON_FAILURE_PATH = "notification_on_failure_file"
+    PROP_NOTIFY_CLIPS_ON_SUCCESS = "notify_clips_on_success"
+    PROP_NOTIFY_CLIPS_ON_SUCCESS_PATH = "notify_clips_on_success_file"
+    PROP_NOTIFY_CLIPS_ON_FAILURE = "notify_clips_on_failure"
+    PROP_NOTIFY_CLIPS_ON_FAILURE_PATH = "notify_clips_on_failure_file"
+    PROP_NOTIFY_VIDEOS_ON_SUCCESS = "notify_videos_on_success"
+    PROP_NOTIFY_VIDEOS_ON_SUCCESS_PATH = "notify_videos_on_success_file"
+    PROP_NOTIFY_VIDEOS_ON_FAILURE = "notify_videos_on_failure"
+    PROP_NOTIFY_VIDEOS_ON_FAILURE_PATH = "notify_videos_on_failure_file"
 
     # Popup notification settings
-    PROP_POPUP_ON_SUCCESS = "prop_popup_on_success"
-    PROP_POPUP_ON_FAILURE = "prop_popup_on_failure"
+    PROP_POPUP_CLIPS_ON_SUCCESS = "popup_clips_on_success"
+    PROP_POPUP_CLIPS_ON_FAILURE = "popup_clips_on_failure"
+    PROP_POPUP_VIDEOS_ON_SUCCESS = "popup_videos_on_success"
+    PROP_POPUP_VIDEOS_ON_FAILURE = "popup_videos_on_failure"
 
     # Custom names settings
     PROP_CUSTOM_NAMES_LIST = "custom_names_list"

@@ -206,15 +206,15 @@ class ConfigTypes(Enum):
 
 
 class ClipNamingModes(Enum):
-    CURRENT_PROCESS = 0
-    MOST_RECORDED_PROCESS = 1
-    CURRENT_SCENE = 2
+    CURRENT_PROCESS = 1
+    MOST_RECORDED_PROCESS = 2
+    CURRENT_SCENE = 3
 
 
 class VideoNamingModes(Enum):
-    CURRENT_PROCESS = 0
-    MOST_RECORDED_PROCESS = 1
-    CURRENT_SCENE = 2
+    CURRENT_PROCESS = 1
+    MOST_RECORDED_PROCESS = 2
+    CURRENT_SCENE = 3
 
 
 class PropertiesNames:
@@ -229,17 +229,19 @@ class PropertiesNames:
     # Clips path settings
     PROP_CLIPS_BASE_PATH = "clips_base_path"
     TEXT_BASE_PATH_INFO = "base_path_info"
-    PROP_CLIPS_FILENAME_CONDITION = "clips_filename_condition"
+    PROP_CLIPS_NAMING_MODE = "clips_naming_mode"
     TXT_CLIPS_HOTKEY_TIP = "clips_hotkey_tip"
     PROP_CLIPS_FILENAME_FORMAT = "clips_filename_format"
     TXT_CLIPS_FILENAME_FORMAT_ERR = "clips_filename_format_err"
     PROP_CLIPS_SAVE_TO_FOLDER = "clips_save_to_folder"
 
     # Videos path settings
-    PROP_VIDEOS_FILENAME_CONDITION = "videos_filename_condition"
+    PROP_VIDEOS_NAMING_MODE = "video_naming_mode"
     TXT_VIDEOS_HOTKEY_TIP = "videos_hotkey_tip"
     PROP_VIDEOS_FILENAME_FORMAT = "videos_filename_format"
+    TXT_VIDEOS_FILENAME_FORMAT_ERR = "videos_filename_format_err"
     PROP_VIDEOS_SAVE_TO_FOLDER = "videos_save_to_folder"
+    PROP_VIDEOS_ONLY_FORCE_MODE = "videos_only_force_mode"
 
     # Sound notification settings
     PROP_NOTIFICATION_ON_SUCCESS = "notification_on_success"
@@ -445,7 +447,7 @@ def setup_clip_paths_settings(group_obj):
     # ----- Clips name condition -----
     filename_condition = obs.obs_properties_add_list(
         props=group_obj,
-        name=PN.PROP_CLIPS_FILENAME_CONDITION,
+        name=PN.PROP_CLIPS_NAMING_MODE,
         description="Clip name based on",
         type=obs.OBS_COMBO_TYPE_RADIO,
         format=obs.OBS_COMBO_FORMAT_INT
@@ -509,7 +511,7 @@ def setup_video_paths_settings(group_obj):
     # ----- Video name condition -----
     filename_condition = obs.obs_properties_add_list(
         props=group_obj,
-        name=PN.PROP_VIDEOS_FILENAME_CONDITION,
+        name=PN.PROP_VIDEOS_NAMING_MODE,
         description="Video name based on",
         type=obs.OBS_COMBO_TYPE_RADIO,
         format=obs.OBS_COMBO_FORMAT_INT
@@ -532,7 +534,7 @@ def setup_video_paths_settings(group_obj):
 
     t = obs.obs_properties_add_text(
         props=group_obj,
-        name=PN.TXT_CLIPS_HOTKEY_TIP,
+        name=PN.TXT_VIDEOS_HOTKEY_TIP,
         description="You can set up hotkeys for each mode in File -> Settings -> Hotkeys",
         type=obs.OBS_TEXT_INFO
     )
@@ -551,7 +553,7 @@ def setup_video_paths_settings(group_obj):
 
     t = obs.obs_properties_add_text(
         props=group_obj,
-        name=PN.TXT_CLIPS_FILENAME_FORMAT_ERR,
+        name=PN.TXT_VIDEOS_FILENAME_FORMAT_ERR,
         description="<font color=\"red\"><pre> Invalid format!</pre></font>",
         type=obs.OBS_TEXT_INFO
     )
@@ -562,6 +564,13 @@ def setup_video_paths_settings(group_obj):
         props=group_obj,
         name=PN.PROP_VIDEOS_SAVE_TO_FOLDER,
         description="Create different folders for different video names",
+    )
+
+    # ----- Rename only if force mode -----
+    obs.obs_properties_add_bool(
+        props=group_obj,
+        name=PN.PROP_VIDEOS_ONLY_FORCE_MODE,
+        description="Rename and move the video only if it was saved using the script's hotkeys"
     )
 
 
@@ -1193,7 +1202,7 @@ def gen_clip_base_name(mode: int) -> str:
     :param mode: Clip naming mode. If 0 - gets mode from script config.
     """
     _print("Generating clip base name...")
-    mode = obs.obs_data_get_int(VARIABLES.script_settings, PN.PROP_CLIPS_FILENAME_CONDITION) if not mode else mode
+    mode = obs.obs_data_get_int(VARIABLES.script_settings, PN.PROP_CLIPS_NAMING_MODE) if not mode else mode
 
     if mode in [1, 2]:
         if mode == 1:
@@ -1253,13 +1262,13 @@ def get_name_from_custom_names(executable_path: str) -> str | None:
     return VARIABLES.custom_names[last_result]
 
 
-def format_filename(clip_name: str, dt: datetime | None = None,
+def format_filename(name: str, dt: datetime | None = None,
                     force_default_template: bool = False, raise_exception: bool = False) -> str:
     """
     Formats the clip file name based on the template.
     If the template is invalid, uses the default template.
 
-    :param clip_name: clip name.
+    :param name: base name.
     :param dt: datetime obj.
     :param force_default_template: use the default template even if the template in the settings is valid.
         This param uses only in this function (in recursive call) and only if something wrong with users template.
@@ -1279,7 +1288,7 @@ def format_filename(clip_name: str, dt: datetime | None = None,
     if force_default_template:
         template = DEFAULT_FILENAME_FORMAT
 
-    filename = template.replace("%NAME", clip_name)
+    filename = template.replace("%NAME", name)
 
     try:
         filename = dt.strftime(filename)
@@ -1290,7 +1299,7 @@ def format_filename(clip_name: str, dt: datetime | None = None,
             raise ValueError
 
         _print("Using default filename format.")
-        return format_filename(clip_name, dt, force_default_template=True)
+        return format_filename(name, dt, force_default_template=True)
 
     for i in FILENAME_PROHIBITED_CHARS:
         if i in filename:
@@ -1535,11 +1544,17 @@ def load_hotkeys():
 def script_defaults(s):
     _print("Loading default values...")
     obs.obs_data_set_default_string(s, PN.PROP_CLIPS_BASE_PATH, get_obs_config("SimpleOutput", "FilePath"))
-    obs.obs_data_set_default_int(s, PN.PROP_CLIPS_FILENAME_CONDITION, 1)
+    obs.obs_data_set_default_int(s, PN.PROP_CLIPS_NAMING_MODE, ClipNamingModes.CURRENT_PROCESS.value)
     obs.obs_data_set_default_string(s, PN.PROP_CLIPS_FILENAME_FORMAT, DEFAULT_FILENAME_FORMAT)
     obs.obs_data_set_default_bool(s, PN.PROP_CLIPS_SAVE_TO_FOLDER, True)
+
+    obs.obs_data_set_default_int(s, PN.PROP_VIDEOS_NAMING_MODE, VideoNamingModes.MOST_RECORDED_PROCESS.value)
+    obs.obs_data_set_default_string(s, PN.PROP_VIDEOS_FILENAME_FORMAT, DEFAULT_FILENAME_FORMAT)
+    obs.obs_data_set_default_bool(s, PN.PROP_VIDEOS_SAVE_TO_FOLDER, True)
+
     obs.obs_data_set_default_bool(s, PN.PROP_NOTIFICATION_ON_SUCCESS, False)
     obs.obs_data_set_default_bool(s, PN.PROP_NOTIFICATION_ON_FAILURE, False)
+
     obs.obs_data_set_default_int(s, PN.PROP_RESTART_BUFFER_LOOP, 3600)
     obs.obs_data_set_default_bool(s, PN.PROP_RESTART_BUFFER, True)
 

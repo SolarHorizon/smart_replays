@@ -12,7 +12,7 @@
 #  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 #  GNU Affero General Public License for more details.
 
-from .globals import VARIABLES, PN, FORCE_MODE_LOCK
+from .globals import VARIABLES, PN, CLIPS_FORCE_MODE_LOCK
 from .tech import _print
 from .obs_related import get_replay_buffer_max_time, restart_replay_buffering
 from .script_helpers import notify
@@ -73,7 +73,7 @@ def on_buffer_save_callback(event):
 
         if VARIABLES.force_mode:
             VARIABLES.force_mode = 0
-            FORCE_MODE_LOCK.release()
+            CLIPS_FORCE_MODE_LOCK.release()
         notify(True, str(path))
     except:
         _print("An error occurred while moving file to the new destination.")

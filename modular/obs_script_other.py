@@ -15,7 +15,10 @@
 from .globals import (VARIABLES,
                       VERSION,
                       DEFAULT_FILENAME_FORMAT,
-                      DEFAULT_CUSTOM_NAMES, PN)
+                      DEFAULT_CUSTOM_NAMES,
+                      ClipNamingModes,
+                      VideoNamingModes,
+                      PN)
 
 from .tech import _print
 from .obs_related import get_obs_config
@@ -27,7 +30,6 @@ from .obs_events_callbacks import (on_buffer_save_callback,
                                    on_video_recording_stopping_callback,
                                    on_video_recording_stopped_callback)
 from .updates_check import check_updates
-from .globals import VERSION
 from .script_helpers import load_custom_names
 from .hotkeys import load_hotkeys
 
@@ -38,11 +40,17 @@ import json
 def script_defaults(s):
     _print("Loading default values...")
     obs.obs_data_set_default_string(s, PN.PROP_CLIPS_BASE_PATH, get_obs_config("SimpleOutput", "FilePath"))
-    obs.obs_data_set_default_int(s, PN.PROP_CLIPS_FILENAME_CONDITION, 1)
+    obs.obs_data_set_default_int(s, PN.PROP_CLIPS_NAMING_MODE, ClipNamingModes.CURRENT_PROCESS.value)
     obs.obs_data_set_default_string(s, PN.PROP_CLIPS_FILENAME_FORMAT, DEFAULT_FILENAME_FORMAT)
     obs.obs_data_set_default_bool(s, PN.PROP_CLIPS_SAVE_TO_FOLDER, True)
-    obs.obs_data_set_default_bool(s, PN.PROP_NOTIFICATION_ON_SUCCESS, False)
-    obs.obs_data_set_default_bool(s, PN.PROP_NOTIFICATION_ON_FAILURE, False)
+
+    obs.obs_data_set_default_int(s, PN.PROP_VIDEOS_NAMING_MODE, VideoNamingModes.MOST_RECORDED_PROCESS.value)
+    obs.obs_data_set_default_string(s, PN.PROP_VIDEOS_FILENAME_FORMAT, DEFAULT_FILENAME_FORMAT)
+    obs.obs_data_set_default_bool(s, PN.PROP_VIDEOS_SAVE_TO_FOLDER, True)
+
+    obs.obs_data_set_default_bool(s, PN.PROP_NOTIFY_CLIPS_ON_SUCCESS, False)
+    obs.obs_data_set_default_bool(s, PN.PROP_NOTIFY_CLIPS_ON_FAILURE, False)
+
     obs.obs_data_set_default_int(s, PN.PROP_RESTART_BUFFER_LOOP, 3600)
     obs.obs_data_set_default_bool(s, PN.PROP_RESTART_BUFFER, True)
 

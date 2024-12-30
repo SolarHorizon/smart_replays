@@ -34,7 +34,7 @@ def gen_clip_base_name(mode: int) -> str:
     :param mode: Clip naming mode. If 0 - gets mode from script config.
     """
     _print("Generating clip base name...")
-    mode = obs.obs_data_get_int(VARIABLES.script_settings, PN.PROP_CLIPS_FILENAME_CONDITION) if not mode else mode
+    mode = obs.obs_data_get_int(VARIABLES.script_settings, PN.PROP_CLIPS_NAMING_MODE) if not mode else mode
 
     if mode in [1, 2]:
         if mode == 1:
@@ -94,13 +94,13 @@ def get_name_from_custom_names(executable_path: str) -> str | None:
     return VARIABLES.custom_names[last_result]
 
 
-def format_filename(clip_name: str, dt: datetime | None = None,
+def format_filename(name: str, dt: datetime | None = None,
                     force_default_template: bool = False, raise_exception: bool = False) -> str:
     """
     Formats the clip file name based on the template.
     If the template is invalid, uses the default template.
 
-    :param clip_name: clip name.
+    :param name: base name.
     :param dt: datetime obj.
     :param force_default_template: use the default template even if the template in the settings is valid.
         This param uses only in this function (in recursive call) and only if something wrong with users template.
@@ -120,7 +120,7 @@ def format_filename(clip_name: str, dt: datetime | None = None,
     if force_default_template:
         template = DEFAULT_FILENAME_FORMAT
 
-    filename = template.replace("%NAME", clip_name)
+    filename = template.replace("%NAME", name)
 
     try:
         filename = dt.strftime(filename)
@@ -131,7 +131,7 @@ def format_filename(clip_name: str, dt: datetime | None = None,
             raise ValueError
 
         _print("Using default filename format.")
-        return format_filename(clip_name, dt, force_default_template=True)
+        return format_filename(name, dt, force_default_template=True)
 
     for i in FILENAME_PROHIBITED_CHARS:
         if i in filename:

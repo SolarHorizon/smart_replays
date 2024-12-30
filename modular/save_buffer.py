@@ -12,7 +12,7 @@
 #  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 #  GNU Affero General Public License for more details.
 
-from .globals import VARIABLES, FORCE_MODE_LOCK, PN
+from .globals import VARIABLES, CLIPS_FORCE_MODE_LOCK, PN
 from .obs_related import get_last_replay_file_name, get_base_path
 from .clipname_gen import gen_clip_base_name, format_filename, add_duplicate_suffix
 from .tech import _print
@@ -55,9 +55,9 @@ def save_buffer_with_force_mode(mode: int):
     if not obs.obs_frontend_replay_buffer_active():
         return
 
-    if FORCE_MODE_LOCK.locked():
+    if CLIPS_FORCE_MODE_LOCK.locked():
         return
 
-    FORCE_MODE_LOCK.acquire()
+    CLIPS_FORCE_MODE_LOCK.acquire()
     VARIABLES.force_mode = mode
     obs.obs_frontend_replay_buffer_save()

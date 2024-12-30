@@ -115,7 +115,7 @@ def setup_clip_paths_settings(group_obj):
     # ----- Clips name condition -----
     filename_condition = obs.obs_properties_add_list(
         props=group_obj,
-        name=PN.PROP_CLIPS_FILENAME_CONDITION,
+        name=PN.PROP_CLIPS_NAMING_MODE,
         description="Clip name based on",
         type=obs.OBS_COMBO_TYPE_RADIO,
         format=obs.OBS_COMBO_FORMAT_INT
@@ -179,7 +179,7 @@ def setup_video_paths_settings(group_obj):
     # ----- Video name condition -----
     filename_condition = obs.obs_properties_add_list(
         props=group_obj,
-        name=PN.PROP_VIDEOS_FILENAME_CONDITION,
+        name=PN.PROP_VIDEOS_NAMING_MODE,
         description="Video name based on",
         type=obs.OBS_COMBO_TYPE_RADIO,
         format=obs.OBS_COMBO_FORMAT_INT
@@ -202,7 +202,7 @@ def setup_video_paths_settings(group_obj):
 
     t = obs.obs_properties_add_text(
         props=group_obj,
-        name=PN.TXT_CLIPS_HOTKEY_TIP,
+        name=PN.TXT_VIDEOS_HOTKEY_TIP,
         description="You can set up hotkeys for each mode in File -> Settings -> Hotkeys",
         type=obs.OBS_TEXT_INFO
     )
@@ -221,7 +221,7 @@ def setup_video_paths_settings(group_obj):
 
     t = obs.obs_properties_add_text(
         props=group_obj,
-        name=PN.TXT_CLIPS_FILENAME_FORMAT_ERR,
+        name=PN.TXT_VIDEOS_FILENAME_FORMAT_ERR,
         description="<font color=\"red\"><pre> Invalid format!</pre></font>",
         type=obs.OBS_TEXT_INFO
     )
@@ -234,16 +234,23 @@ def setup_video_paths_settings(group_obj):
         description="Create different folders for different video names",
     )
 
+    # ----- Rename only if force mode -----
+    obs.obs_properties_add_bool(
+        props=group_obj,
+        name=PN.PROP_VIDEOS_ONLY_FORCE_MODE,
+        description="Rename and move the video only if it was saved using the script's hotkeys"
+    )
+
 
 def setup_notifications_settings(group_obj):
     notification_success_prop = obs.obs_properties_add_bool(
         props=group_obj,
-        name=PN.PROP_NOTIFICATION_ON_SUCCESS,
+        name=PN.PROP_NOTIFY_CLIPS_ON_SUCCESS,
         description="On success"
     )
     success_path_prop = obs.obs_properties_add_path(
         props=group_obj,
-        name=PN.PROP_NOTIFICATION_ON_SUCCESS_PATH,
+        name=PN.PROP_NOTIFY_CLIPS_ON_SUCCESS_PATH,
         description="",
         type=obs.OBS_PATH_FILE,
         filter=None,
@@ -252,12 +259,12 @@ def setup_notifications_settings(group_obj):
 
     notification_failure_prop = obs.obs_properties_add_bool(
         props=group_obj,
-        name=PN.PROP_NOTIFICATION_ON_FAILURE,
+        name=PN.PROP_NOTIFY_CLIPS_ON_FAILURE,
         description="On failure"
     )
     failure_path_prop = obs.obs_properties_add_path(
         props=group_obj,
-        name=PN.PROP_NOTIFICATION_ON_FAILURE_PATH,
+        name=PN.PROP_NOTIFY_CLIPS_ON_FAILURE_PATH,
         description="",
         type=obs.OBS_PATH_FILE,
         filter=None,
@@ -265,9 +272,9 @@ def setup_notifications_settings(group_obj):
     )
 
     obs.obs_property_set_visible(success_path_prop,
-                                 obs.obs_data_get_bool(VARIABLES.script_settings, PN.PROP_NOTIFICATION_ON_SUCCESS))
+                                 obs.obs_data_get_bool(VARIABLES.script_settings, PN.PROP_NOTIFY_CLIPS_ON_SUCCESS))
     obs.obs_property_set_visible(failure_path_prop,
-                                 obs.obs_data_get_bool(VARIABLES.script_settings, PN.PROP_NOTIFICATION_ON_FAILURE))
+                                 obs.obs_data_get_bool(VARIABLES.script_settings, PN.PROP_NOTIFY_CLIPS_ON_FAILURE))
 
     # ----- Callbacks ------
     obs.obs_property_set_modified_callback(notification_success_prop, update_notifications_menu_callback)
@@ -277,13 +284,13 @@ def setup_notifications_settings(group_obj):
 def setup_popup_notification_settings(group_obj):
     obs.obs_properties_add_bool(
         props=group_obj,
-        name=PN.PROP_POPUP_ON_SUCCESS,
+        name=PN.PROP_POPUP_CLIPS_ON_SUCCESS,
         description="On success"
     )
 
     obs.obs_properties_add_bool(
         props=group_obj,
-        name=PN.PROP_POPUP_ON_FAILURE,
+        name=PN.PROP_POPUP_CLIPS_ON_FAILURE,
         description="On failure"
     )
 

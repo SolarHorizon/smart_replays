@@ -38,18 +38,18 @@ def notify(success: bool, clip_path: str):
     python_exe = os.path.join(get_obs_config("Python", "Path64bit", str, ConfigTypes.APP), "pythonw.exe")
 
     if success:
-        if sound_notifications and obs.obs_data_get_bool(VARIABLES.script_settings, PN.PROP_NOTIFICATION_ON_SUCCESS):
-            path = obs.obs_data_get_string(VARIABLES.script_settings, PN.PROP_NOTIFICATION_ON_SUCCESS_PATH)
+        if sound_notifications and obs.obs_data_get_bool(VARIABLES.script_settings, PN.PROP_NOTIFY_CLIPS_ON_SUCCESS):
+            path = obs.obs_data_get_string(VARIABLES.script_settings, PN.PROP_NOTIFY_CLIPS_ON_SUCCESS_PATH)
             play_sound(path)
 
-        if popup_notifications and obs.obs_data_get_bool(VARIABLES.script_settings, PN.PROP_POPUP_ON_SUCCESS):
+        if popup_notifications and obs.obs_data_get_bool(VARIABLES.script_settings, PN.PROP_POPUP_CLIPS_ON_SUCCESS):
             subprocess.Popen([python_exe, __file__, "Clip saved", f"Clip saved to {clip_path}"])
     else:
-        if sound_notifications and obs.obs_data_get_bool(VARIABLES.script_settings, PN.PROP_NOTIFICATION_ON_FAILURE):
-            path = obs.obs_data_get_string(VARIABLES.script_settings, PN.PROP_NOTIFICATION_ON_FAILURE_PATH)
+        if sound_notifications and obs.obs_data_get_bool(VARIABLES.script_settings, PN.PROP_NOTIFY_CLIPS_ON_FAILURE):
+            path = obs.obs_data_get_string(VARIABLES.script_settings, PN.PROP_NOTIFY_CLIPS_ON_FAILURE_PATH)
             play_sound(path)
 
-        if popup_notifications and obs.obs_data_get_bool(VARIABLES.script_settings, PN.PROP_POPUP_ON_FAILURE):
+        if popup_notifications and obs.obs_data_get_bool(VARIABLES.script_settings, PN.PROP_POPUP_CLIPS_ON_FAILURE):
             subprocess.Popen([python_exe, __file__, "Clip not saved", f"More in the logs.", "#C00000"])
 
 
