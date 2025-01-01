@@ -29,7 +29,6 @@ from ctypes import wintypes
 from datetime import datetime
 from collections import deque
 from threading import Lock, Thread
-from packaging.version import Version
 from enum import Enum
 
 import tkinter as tk
