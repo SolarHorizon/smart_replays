@@ -41,7 +41,8 @@ if __name__ != '__main__':
 # UI
 # This part of the script calls only when it is run as a main program, not imported by OBS.
 class ScrollingText:
-    def __init__(self, canvas: tk.Canvas, text, visible_area_width, start_pos, font, speed=1):
+    def __init__(self, canvas: tk.Canvas, text, visible_area_width, start_pos, font, speed=1,
+                 on_finish_callback=None):
         """
         Scrolling text widget.
 
@@ -59,13 +60,13 @@ class ScrollingText:
         self.start_pos = start_pos
         self.font = font
         self.speed = speed
+        self.on_finish_callback = on_finish_callback
 
         self.text_width = font.measure(text)
         self.text_height = font.metrics("ascent") + font.metrics("descent")
         self.text_id = self.canvas.create_text(0, round((self.canvas.winfo_height() - self.text_height) / 2),
                                                anchor='nw', text=self.text, font=self.font, fill="#ffffff")
         self.text_curr_pos = start_pos
-        self.canvas.after(1000, self.update_scroll)
 
     def update_scroll(self):
         if self.text_curr_pos + self.text_width > self.area_width:
@@ -73,6 +74,10 @@ class ScrollingText:
             self.text_curr_pos -= self.speed
 
             self.canvas.after(20, self.update_scroll)
+        else:
+            if self.on_finish_callback:
+                self.on_finish_callback()
+
 
 
 class NotificationWindow:
@@ -121,8 +126,8 @@ class NotificationWindow:
         self.canvas.pack(expand=True)
         self.canvas.update()
         font = f.Font(family="Cascadia Mono", size=self.text_font_size)
-        message = ScrollingText(self.canvas, message, self.main_frm_w, self.content_frm_padding_x * 2, font=font,
-                                speed=3)
+        self.message = ScrollingText(self.canvas, message, self.main_frm_w, self.content_frm_padding_x * 2, font=font,
+                                     speed=5, on_finish_callback=self.on_text_animation_finish_callback)
 
     def animate_window(self, current_x: int, target_x: int, speed: int = 5):
         speed = speed if current_x < target_x else -speed
@@ -154,7 +159,7 @@ class NotificationWindow:
         self.animate_window(self.scr_w, self.wnd_x)
         time.sleep(0.1)
         self.animate_main_frame(self.main_frm_x, self.main_frm_padding)
-        self.window.after(5000, self.close)
+        self.message.canvas.after(1000, self.message.update_scroll)
         self.root.mainloop()
 
     def close(self):
@@ -163,6 +168,10 @@ class NotificationWindow:
         self.animate_window(self.wnd_x, self.scr_w)
         self.window.destroy()
         self.root.destroy()
+
+    def on_text_animation_finish_callback(self):
+        time.sleep(2.5)
+        self.close()
 
 
 if __name__ == '__main__':
@@ -175,7 +184,7 @@ if __name__ == '__main__':
 
 
 # ------------- OBS Script ----------------
-VERSION = "1.0.4"
+VERSION = "1.0.5"
 OBS_VERSION_STRING = obs.obs_get_version_string()
 OBS_VERSION_RE = re.compile(r'(\d+)\.(\d+)\.(\d+)')
 OBS_VERSION = [int(i) for i in OBS_VERSION_RE.match(OBS_VERSION_STRING).groups()]
