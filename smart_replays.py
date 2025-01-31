@@ -198,7 +198,7 @@ if __name__ == '__main__':
 
 
 # ------------- OBS Script ----------------
-VERSION = "1.0.6"
+VERSION = "1.0.7"
 OBS_VERSION_STRING = obs.obs_get_version_string()
 OBS_VERSION_RE = re.compile(r'(\d+)\.(\d+)\.(\d+)')
 OBS_VERSION = [int(i) for i in OBS_VERSION_RE.match(OBS_VERSION_STRING).groups()]
@@ -282,6 +282,7 @@ class PropertiesNames:
 
     PROP_POPUP_ON_SUCCESS = "prop_popup_on_success"
     PROP_POPUP_ON_FAILURE = "prop_popup_on_failure"
+    PROP_POPUP_PATH_TYPE = "prop_popup_path_type"
 
     PROP_CUSTOM_NAMES_LIST = "custom_names_list"
     TXT_CUSTOM_NAME_DESC = "custom_names_desc"
@@ -513,6 +514,35 @@ Example: 00, 01, …, 53</td></tr>
         props=popup_props,
         name=PN.PROP_POPUP_ON_FAILURE,
         description="On failure"
+    )
+
+    popup_path_type = obs.obs_properties_add_list(
+        props=popup_props,
+        name=PN.PROP_POPUP_PATH_TYPE,
+        description="Display",
+        type=obs.OBS_COMBO_TYPE_RADIO,
+        format=obs.OBS_COMBO_FORMAT_INT
+    )
+    obs.obs_property_list_add_int(
+        p=popup_path_type,
+        name="full path",
+        val=1
+    )
+    obs.obs_property_list_add_int(
+        p=popup_path_type,
+        name="folder and file name",
+        val=2
+    )
+    obs.obs_property_list_add_int(
+        p=popup_path_type,
+        name="just folder",
+        val=3
+    )
+
+    obs.obs_property_list_add_int(
+        p=popup_path_type,
+        name="just file name",
+        val=4
     )
     # ------ Custom names settings ------
     obs.obs_properties_add_text(
@@ -966,6 +996,7 @@ def notify(success: bool, clip_path: str):
     """
     sound_notifications = obs.obs_data_get_bool(script_settings, PN.GR_NOTIFICATIONS)
     popup_notifications = obs.obs_data_get_bool(script_settings, PN.GR_POPUP)
+    popup_path_type = obs.obs_data_get_int(script_settings, PN.PROP_POPUP_PATH_TYPE)
     python_exe = os.path.join(get_obs_config("Python", "Path64bit", str, ConfigTypes.USER), "pythonw.exe")
 
     if success:
@@ -974,7 +1005,14 @@ def notify(success: bool, clip_path: str):
             play_sound(path)
 
         if popup_notifications and obs.obs_data_get_bool(script_settings, PN.PROP_POPUP_ON_SUCCESS):
-            subprocess.Popen([python_exe, __file__, "Clip saved", f"Clip saved to {clip_path}"])
+            display_path = clip_path
+            if popup_path_type == 2:
+                display_path = Path(*Path(display_path).parts[-2:])
+            elif popup_path_type == 3:
+                display_path = Path(display_path).parts[-2]
+            elif popup_path_type == 4:
+                display_path = Path(display_path).parts[-1]
+            subprocess.Popen([python_exe, __file__, "Clip saved", f"Clip saved to {display_path}"])
     else:
         if sound_notifications and obs.obs_data_get_bool(script_settings, PN.PROP_NOTIFICATION_ON_FAILURE):
             path = obs.obs_data_get_string(script_settings, PN.PROP_NOTIFICATION_ON_FAILURE_PATH)
@@ -1275,6 +1313,9 @@ def script_defaults(s):
     obs.obs_data_set_default_bool(s, PN.PROP_SAVE_TO_FOLDER, True)
     obs.obs_data_set_default_bool(s, PN.PROP_NOTIFICATION_ON_SUCCESS, False)
     obs.obs_data_set_default_bool(s, PN.PROP_NOTIFICATION_ON_FAILURE, False)
+    obs.obs_data_set_default_bool(s, PN.PROP_POPUP_ON_SUCCESS, False)
+    obs.obs_data_set_default_bool(s, PN.PROP_POPUP_ON_FAILURE, False)
+    obs.obs_data_set_default_int(s, PN.PROP_POPUP_PATH_TYPE, 1)
     obs.obs_data_set_default_int(s, PN.PROP_RESTART_BUFFER_LOOP, 3600)
     obs.obs_data_set_default_bool(s, PN.PROP_RESTART_BUFFER, True)
 
