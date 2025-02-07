@@ -27,16 +27,13 @@ def get_latest_release_tag() -> dict | None:
             if response.status == 200:
                 data = json.load(response)
                 return data.get('tag_name')
-    # except:
-    #         _print(f"Failed to check updates: bad response status code: {e.code}")
     except:
         _print(f"Failed to check updates.")
         _print(traceback.format_exc())
-
     return None
 
 
-def check_updates(current_version):
+def check_updates(current_version: str):
     latest_version = get_latest_release_tag()
     _print(latest_version)
     if latest_version and f'v{current_version}' != latest_version:

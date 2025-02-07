@@ -128,7 +128,7 @@ def check_base_path_callback(p, prop, data):
     Checks base path is in the same disk as OBS recordings path.
     If it's not - sets OBS records path as base path for clips and shows warning.
     """
-    warn_text = obs.obs_properties_get(p, PN.TEXT_BASE_PATH_INFO)
+    warn_text = obs.obs_properties_get(p, PN.TXT_CLIPS_BASE_PATH_WARNING)
 
     obs_records_path = Path(get_base_path(from_obs_config=True))
     curr_path = Path(obs.obs_data_get_string(data, PN.PROP_CLIPS_BASE_PATH))

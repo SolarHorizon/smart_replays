@@ -12,7 +12,7 @@
 #  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 #  GNU Affero General Public License for more details.
 
-from .globals import VARIABLES, PN
+from .globals import VARIABLES, PN, ClipNamingModes, VideoNamingModes, PopupPathDisplayModes
 from .properties_callbacks import (open_github_callback,
                                    update_notifications_menu_callback,
                                    import_custom_names_from_json_callback,
@@ -20,6 +20,7 @@ from .properties_callbacks import (open_github_callback,
                                    check_base_path_callback,
                                    check_filename_template_callback,
                                    update_custom_names_callback)
+from .obs_related import get_base_path
 
 import obspython as obs
 import sys
@@ -100,11 +101,11 @@ def setup_clip_paths_settings(group_obj):
         description="Base path for clips",
         type=obs.OBS_PATH_DIRECTORY,
         filter=None,
-        default_path="C:\\"
+        default_path=str(get_base_path(from_obs_config=True))
     )
     t = obs.obs_properties_add_text(
         props=group_obj,
-        name=PN.TEXT_BASE_PATH_INFO,
+        name=PN.TXT_CLIPS_BASE_PATH_WARNING,
         description="The path must be on the same disk as the path for OBS records "
                     "(File -> Settings -> Output -> Recording -> Recording Path).\n"
                     "Otherwise, the script will not be able to move the clip to the correct folder.",
@@ -112,8 +113,8 @@ def setup_clip_paths_settings(group_obj):
     )
     obs.obs_property_text_set_info_type(t, obs.OBS_TEXT_INFO_WARNING)
 
-    # ----- Clips name condition -----
-    filename_condition = obs.obs_properties_add_list(
+    # ----- Clip naming mode -----
+    clip_naming_mode_prop = obs.obs_properties_add_list(
         props=group_obj,
         name=PN.PROP_CLIPS_NAMING_MODE,
         description="Clip name based on",
@@ -121,19 +122,19 @@ def setup_clip_paths_settings(group_obj):
         format=obs.OBS_COMBO_FORMAT_INT
     )
     obs.obs_property_list_add_int(
-        p=filename_condition,
-        name="the name of an active app (.exe file name) at the moment of clip saving",
-        val=1
+        p=clip_naming_mode_prop,
+        name="the name of an active app (.exe file name) at the moment of clip saving;",
+        val=ClipNamingModes.CURRENT_PROCESS.value()
     )
     obs.obs_property_list_add_int(
-        p=filename_condition,
-        name="the name of an app (.exe file name) that was active most of the time during the clip recording",
-        val=2
+        p=clip_naming_mode_prop,
+        name="the name of an app (.exe file name) that was active most of the time during the clip recording;",
+        val=ClipNamingModes.MOST_RECORDED_PROCESS.value()
     )
     obs.obs_property_list_add_int(
-        p=filename_condition,
-        name="the name of the current scene",
-        val=3
+        p=clip_naming_mode_prop,
+        name="the name of the current scene;",
+        val=ClipNamingModes.CURRENT_SCENE.value()
     )
 
     t = obs.obs_properties_add_text(
@@ -167,7 +168,7 @@ def setup_clip_paths_settings(group_obj):
     obs.obs_properties_add_bool(
         props=group_obj,
         name=PN.PROP_CLIPS_SAVE_TO_FOLDER,
-        description="Create different folders for different clip names",
+        description="Sort clips into folders by application or scene",
     )
 
     # ----- Callbacks -----
@@ -298,7 +299,7 @@ def setup_popup_notification_settings(group_obj):
 def setup_custom_names_settings(group_obj):
     obs.obs_properties_add_text(
         props=group_obj,
-        name=PN.TXT_CUSTOM_NAME_DESC,
+        name=PN.TXT_CUSTOM_NAMES_DESC,
         description="Since the executable name doesn't always match the name of the application/game "
                     "(e.g. the game is called Deadlock, but the executable is project8.exe), "
                     "you can set custom names for clips based on the name of the executable / folder "
@@ -446,10 +447,10 @@ def script_properties():
     # ----- Groups -----
     obs.obs_properties_add_group(p, PN.GR_CLIPS_PATHS, "Clip path settings", obs.OBS_PROPERTY_GROUP, clip_path_gr)
     obs.obs_properties_add_group(p, PN.GR_VIDEO_PATHS, "Video path settings", obs.OBS_PROPERTY_GROUP, video_path_gr)
-    obs.obs_properties_add_group(p, PN.GR_NOTIFICATIONS, "Sound notifications", obs.OBS_GROUP_CHECKABLE, notification_gr)
-    obs.obs_properties_add_group(p, PN.GR_POPUP, "Popup notifications", obs.OBS_GROUP_CHECKABLE, popup_gr)
-    obs.obs_properties_add_group(p, PN.GR_CUSTOM_NAMES, "Custom names", obs.OBS_GROUP_NORMAL, custom_names_gr)
-    obs.obs_properties_add_group(p, PN.GR_OTHER, "Other", obs.OBS_GROUP_NORMAL, other_gr)
+    obs.obs_properties_add_group(p, PN.GR_SOUND_NOTIFICATION_SETTINGS, "Sound notifications", obs.OBS_GROUP_CHECKABLE, notification_gr)
+    obs.obs_properties_add_group(p, PN.GR_POPUP_NOTIFICATION_SETTINGS, "Popup notifications", obs.OBS_GROUP_CHECKABLE, popup_gr)
+    obs.obs_properties_add_group(p, PN.GR_CUSTOM_NAMES_SETTINGS, "Custom names", obs.OBS_GROUP_NORMAL, custom_names_gr)
+    obs.obs_properties_add_group(p, PN.GR_OTHER_SETTINGS, "Other", obs.OBS_GROUP_NORMAL, other_gr)
 
     # ------ Setup properties ------
     setup_clip_paths_settings(clip_path_gr)

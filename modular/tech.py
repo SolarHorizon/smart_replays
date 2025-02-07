@@ -17,6 +17,7 @@ from .globals import user32
 import ctypes
 from ctypes import wintypes
 import winsound
+from pathlib import Path
 from datetime import datetime
 
 
@@ -42,7 +43,7 @@ def get_active_window_pid() -> int | None:
     return pid.value
 
 
-def get_executable_path(pid) -> str:
+def get_executable_path(pid: int) -> Path:
     """
     Gets path of process's executable.
 
@@ -59,24 +60,24 @@ def get_executable_path(pid) -> str:
     result = ctypes.windll.psapi.GetModuleFileNameExW(process_handle, None, filename_buffer, 260)
     ctypes.windll.kernel32.CloseHandle(process_handle)
     if result:
-        return filename_buffer.value
+        return Path(filename_buffer.value)
     else:
         raise RuntimeError(f"Cannot get executable path for process {pid}.")
 
 
-def play_sound(path: str):
+def play_sound(path: str | Path):
     """
     Plays sound using windows engine.
 
     :param path: path to sound (.wav)
     """
     try:
-        winsound.PlaySound(path, winsound.SND_ASYNC)
+        winsound.PlaySound(str(path), winsound.SND_ASYNC)
     except:
         pass
 
 
-def get_time_since_last_input() -> float:
+def get_time_since_last_input() -> int:
     """
     Gets the time (in seconds) since the last mouse or keyboard input.
     """
@@ -86,6 +87,6 @@ def get_time_since_last_input() -> float:
     if ctypes.windll.user32.GetLastInputInfo(ctypes.byref(last_input_info)):
         current_time = ctypes.windll.kernel32.GetTickCount()
         idle_time_ms = current_time - last_input_info.dwTime
-        return idle_time_ms / 1000.0
+        return idle_time_ms // 1000
     else:
         return 0

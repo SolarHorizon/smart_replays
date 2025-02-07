@@ -12,9 +12,7 @@
 #  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 #  GNU Affero General Public License for more details.
 
-from .globals import (VARIABLES,
-                      DEFAULT_FILENAME_FORMAT,
-                      FILENAME_PROHIBITED_CHARS, PN)
+from .globals import VARIABLES, CONSTANTS, PN
 
 from .tech import get_active_window_pid, get_executable_path, _print
 from .obs_related import get_current_scene_name
@@ -23,7 +21,6 @@ import obspython as obs
 from pathlib import Path
 from datetime import datetime
 import traceback
-import os
 
 
 def gen_clip_base_name(mode: int) -> str:
@@ -67,31 +64,26 @@ def gen_clip_base_name(mode: int) -> str:
         return get_current_scene_name()
 
 
-def get_name_from_custom_names(executable_path: str) -> str | None:
+def get_exe_alias(executable_path: str | Path, aliases_dict: dict[Path, str]) -> str | None:
     """
-    Searches for the passed path or its parents in the custom names list.
-    Returns None if nothing wasn't found.
+    Retrieves a custom alias for the given executable path from the provided dictionary.
 
-    :param executable_path: Path to executable.
+    The function first checks if the exact `executable_path` exists in `aliases_dict`.
+    If not, it searches for the closest parent directory that is present in the dictionary.
+
+    :param executable_path: A file path or string representing the executable.
+    :param aliases_dict: A dictionary where keys are `Path` objects representing executable file paths
+                         or directories, and values are their corresponding custom aliases.
+    :return: The corresponding alias if found, otherwise `None`.
     """
-    _print(f"Looking for {executable_path} in custom names ...")
+    exe_path = Path(executable_path)
+    if exe_path in aliases_dict:
+        return aliases_dict[exe_path]
 
-    executable_path = Path(executable_path)
-    last_result = None
-    for i in VARIABLES.custom_names:
-        if last_result is None and any([executable_path == i, i in executable_path.parents]):
-            last_result = i
-            continue
+    for parent in exe_path.parents:
+        if parent in aliases_dict:
+            return aliases_dict[parent]
 
-        if last_result in i.parents:
-            last_result = i
-
-    if last_result is None:
-        _print(f"{executable_path} or its parents are not in custom names.")
-        return None
-
-    _print(f"{executable_path} or its parent was found on the list: {last_result} > {VARIABLES.custom_names[last_result]}.")
-    return VARIABLES.custom_names[last_result]
 
 
 def format_filename(name: str, dt: datetime | None = None,
@@ -115,10 +107,10 @@ def format_filename(name: str, dt: datetime | None = None,
     if not template:
         if raise_exception:
             raise ValueError
-        template = DEFAULT_FILENAME_FORMAT
+        template = CONSTANTS.DEFAULT_FILENAME_FORMAT
 
     if force_default_template:
-        template = DEFAULT_FILENAME_FORMAT
+        template = CONSTANTS.DEFAULT_FILENAME_FORMAT
 
     filename = template.replace("%NAME", name)
 
@@ -133,7 +125,7 @@ def format_filename(name: str, dt: datetime | None = None,
         _print("Using default filename format.")
         return format_filename(name, dt, force_default_template=True)
 
-    for i in FILENAME_PROHIBITED_CHARS:
+    for i in CONSTANTS.FILENAME_PROHIBITED_CHARS:
         if i in filename:
             if raise_exception:
                 raise SyntaxError
@@ -142,20 +134,21 @@ def format_filename(name: str, dt: datetime | None = None,
     return filename
 
 
-def add_duplicate_suffix(path: str | Path) -> Path:
+def gen_unique_filename(file_path: str | Path) -> Path:
     """
-    Adds "(n)" to the end of the file name if the passed file already exists.
-    If "FILE_NAME (n)" also exists - increments n.
+    Generates a unique filename by adding a numerical suffix if the file already exists.
 
-    :param path: path to file.
-    :return: updated path.
+    :param file_path: A string or Path object representing the target file.
+    :return: A unique Path object with a modified name if necessary.
     """
-    path = str(path)
+    file_path = Path(file_path)
+    folder, stem, suffix = file_path.parent, file_path.stem, file_path.suffix
 
-    filename, ext = os.path.splitext(path)
-    num = 1
-    while os.path.exists(path):
-        path = filename + f" ({num})" + ext
-        num += 1
+    new_path = file_path
+    counter = 1
 
-    return Path(path)
+    while new_path.exists():
+        new_path = folder / f"{stem} ({counter}){suffix}"
+        counter += 1
+
+    return new_path

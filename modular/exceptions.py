@@ -28,30 +28,18 @@ class CustomNamePathAlreadyExists(CustomNameParsingError):
     """
     Exception raised when a custom name is already exists.
     """
-    def __init__(self, index):
-        """
-        :param index: custom name index.
-        """
-        super().__init__(index)
+    ...
 
 
 class CustomNameInvalidCharacters(CustomNameParsingError):
     """
     Exception raised when a custom name has invalid characters.
     """
-    def __init__(self, index):
-        """
-        :param index: custom name index.
-        """
-        super().__init__(index)
+    ...
 
 
 class CustomNameInvalidFormat(CustomNameParsingError):
     """
     Exception raised when a custom name is invalid format.
     """
-    def __init__(self, index):
-        """
-        :param index: custom name index.
-        """
-        super().__init__(index)
+    ...

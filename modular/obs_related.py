@@ -12,9 +12,10 @@
 #  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 #  GNU Affero General Public License for more details.
 
-from .globals import VARIABLES, PN, ConfigTypes, OBS_VERSION
+from .globals import VARIABLES, PN, CONSTANTS, ConfigTypes
 from .tech import _print
 
+from pathlib import Path
 import obspython as obs
 import time
 
@@ -38,11 +39,10 @@ def get_obs_config(section_name: str | None = None,
     elif config_type is ConfigTypes.APP:
         cfg = obs.obs_frontend_get_global_config()
     else:
-        if OBS_VERSION[0] < 31:
+        if CONSTANTS.OBS_VERSION[0] < 31:
             cfg = obs.obs_frontend_get_global_config()
         else:
             cfg = obs.obs_frontend_get_user_config()
-
 
     if not section_name or not param_name:
         return cfg
@@ -84,7 +84,7 @@ def get_current_scene_name() -> str:
     return name
 
 
-def get_base_path(from_obs_config: bool = False) -> str:
+def get_base_path(from_obs_config: bool = False) -> Path:
     """
     Returns current base path for clips.
 
@@ -96,13 +96,13 @@ def get_base_path(from_obs_config: bool = False) -> str:
         # If PN.PROP_CLIPS_BASE_PATH is not saved in the script config, then it has a default value,
         # which is the value from the OBS config.
         if script_path:
-            return script_path
+            return Path(script_path)
 
     config_mode = get_obs_config("Output", "Mode")
     if config_mode == "Simple":
-        return get_obs_config("SimpleOutput", "FilePath")
+        return Path(get_obs_config("SimpleOutput", "FilePath"))
     else:
-        return get_obs_config("AdvOut", "RecFilePath")
+        return Path(get_obs_config("AdvOut", "RecFilePath"))
 
 
 def get_replay_buffer_max_time() -> int:
@@ -111,14 +111,14 @@ def get_replay_buffer_max_time() -> int:
     """
     config_mode = get_obs_config("Output", "Mode")
     if config_mode == "Simple":
-        return get_obs_config("SimpleOutput", "RecRBTime", value_type=int)
+        return get_obs_config("SimpleOutput", "RecRBTime", int)
     else:
-        return get_obs_config("AdvOut", "RecRBTime", value_type=int)
+        return get_obs_config("AdvOut", "RecRBTime", int)
 
 
 def restart_replay_buffering():
     """
-    Restart replay buffering, obviously -_-
+    Restarts replay buffering, obviously -_-
     """
     _print("Stopping replay buffering...")
     replay_output = obs.obs_frontend_get_replay_buffer_output()

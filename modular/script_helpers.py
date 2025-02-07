@@ -33,8 +33,8 @@ def notify(success: bool, clip_path: str):
     """
     Plays and shows success / failure notification if it's enabled in notifications settings.
     """
-    sound_notifications = obs.obs_data_get_bool(VARIABLES.script_settings, PN.GR_NOTIFICATIONS)
-    popup_notifications = obs.obs_data_get_bool(VARIABLES.script_settings, PN.GR_POPUP)
+    sound_notifications = obs.obs_data_get_bool(VARIABLES.script_settings, PN.GR_SOUND_NOTIFICATION_SETTINGS)
+    popup_notifications = obs.obs_data_get_bool(VARIABLES.script_settings, PN.GR_POPUP_NOTIFICATION_SETTINGS)
     python_exe = os.path.join(get_obs_config("Python", "Path64bit", str, ConfigTypes.APP), "pythonw.exe")
 
     if success:

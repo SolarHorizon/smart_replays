@@ -16,6 +16,7 @@ import tkinter as tk
 import time
 import sys
 import ctypes
+import re
 import json
 import traceback
 import webbrowser
@@ -42,16 +43,26 @@ if __name__ != '__main__':
 # You can run this script to show notification:
 # python smart_replays.py <Notification Title> <Notification Text> <Notification Color>
 class ScrollingText:
-    def __init__(self, canvas: tk.Canvas, text, visible_area_width, start_pos, font, speed=1):
+    def __init__(self,
+                 canvas: tk.Canvas,
+                 text,
+                 visible_area_width,
+                 start_pos,
+                 font,
+                 delay: int = 10,
+                 speed=1,
+                 on_finish_callback=None):
         """
         Scrolling text widget.
 
-        :param canvas: canvas.
-        :param text: text.
-        :param visible_area_width: width of the visible area of the text.
-        :param start_pos: text's start position (most likely padding from left border).
-        :param font: font.
-        :param speed: scrolling speed.
+        :param canvas: canvas
+        :param text: text
+        :param visible_area_width: width of the visible area of the text
+        :param start_pos: text's start position (most likely padding from left border)
+        :param font: font
+        :param delay: Delay between text moves (in ms)
+        :param speed: scrolling speed
+        :param on_finish_callback: callback function when text animation is finished
         """
 
         self.canvas = canvas
@@ -59,111 +70,124 @@ class ScrollingText:
         self.area_width = visible_area_width
         self.start_pos = start_pos
         self.font = font
+        self.delay = delay
         self.speed = speed
+        self.on_finish_callback = on_finish_callback
 
         self.text_width = font.measure(text)
         self.text_height = font.metrics("ascent") + font.metrics("descent")
-        self.text_id = self.canvas.create_text(0, round((self.canvas.winfo_height() - self.text_height) / 2),
-                                               anchor='nw', text=self.text, font=self.font, fill="#ffffff")
+        self.text_id = self.canvas.create_text(0, round(self.text_height / 2),
+                                               anchor=tk.NW, text=self.text, font=self.font, fill="#ffffff")
         self.text_curr_pos = start_pos
-        self.canvas.after(1000, self.update_scroll)  # type: ignore
 
     def update_scroll(self):
         if self.text_curr_pos + self.text_width > self.area_width:
             self.canvas.move(self.text_id, -self.speed, 0)
             self.text_curr_pos -= self.speed
 
-            self.canvas.after(20, self.update_scroll)  # type: ignore
+            self.canvas.after(self.delay, self.update_scroll)
+        else:
+            if self.on_finish_callback:
+                self.on_finish_callback()
 
 
 class NotificationWindow:
-    def __init__(self, title: str, message: str, main_color: str = "#76B900"):
+    def __init__(self,
+                 title: str,
+                 message: str,
+                 primary_color: str = "#78B900"):
         self.title = title
         self.message = message
-        self.back_bg = main_color
-        self.main_bg = "#000000"
+        self.primary_color = primary_color
+        self.bg_color = "#000000"
 
         self.root = tk.Tk()
         self.root.withdraw()
-        self.window = tk.Toplevel()
+        self.window = tk.Toplevel(bg="#000001")
         self.window.overrideredirect(True)
-        self.window.attributes("-topmost", True, "-alpha", 0.99)
+        self.window.attributes("-topmost", True, "-alpha", 0.99, "-transparentcolor", "#000001")
+
         self.scr_w, self.scr_h = self.window.winfo_screenwidth(), self.window.winfo_screenheight()
-        self.wnd_w, self.wnd_h = round(self.scr_w / 6.4) * 2, round(self.scr_h / 12)
-        self.main_frm_padding = round(self.wnd_w / 80)
-        self.content_frm_padding_x, self.content_frm_padding_y = round(self.wnd_w / 80), round(self.wnd_h / 12)
-        # window width is x2 bigger, cz half of the window is out of screen
-
-        self.wnd_x = self.scr_w - round(self.wnd_w / 2)  # half of the window is out of screen.
-        self.wnd_y = round(self.scr_h / 10)
-        self.main_frm_x, self.main_frm_y = round(self.wnd_w / 2), 0
-        self.main_frm_w, self.main_frm_h = round(self.wnd_w / 2) - self.main_frm_padding, self.wnd_h
-
+        self.wnd_w, self.wnd_h = round(self.scr_w / 6.4), round(self.scr_h / 12)
+        self.wnd_x, self.wnd_y = self.scr_w - self.wnd_w, round(self.scr_h / 10)
         self.title_font_size = round(self.wnd_h / 5)
-        self.text_font_size = round(self.wnd_h / 8)
+        self.message_font_size = round(self.wnd_h / 8)
+        self.second_frame_padding_x = round(self.wnd_w / 40)
+        self.message_right_padding = round(self.wnd_w / 40)
+        self.content_frame_padding_x, self.content_frame_padding_y = (round(self.wnd_w / 40),
+                                                                      round(self.wnd_h / 12))
 
-        self.green_frame = tk.Frame(self.window, bg=self.back_bg, bd=0)
-        self.green_frame.pack(fill=tk.BOTH, expand=True)
+        self.window.geometry(f"{self.wnd_w}x{self.wnd_h}+{self.wnd_x}+{self.wnd_y}")
 
-        self.main_frame = tk.Frame(self.window, bg=self.main_bg, bd=0, width=self.main_frm_w, height=self.main_frm_h)
-        self.main_frame.pack_propagate(False)
-        self.main_frame.place(x=self.main_frm_x, y=0)
-        self.main_frame.lift()
+        self.first_frame = tk.Frame(self.window, bg=self.primary_color, bd=0, width=1, height=self.wnd_h)
+        self.first_frame.place(x=self.wnd_w-1, y=0)
 
-        self.content_frame = tk.Frame(self.main_frame, bg=self.main_bg, bd=0)
-        self.content_frame.pack(fill=tk.BOTH, anchor=tk.W, padx=self.content_frm_padding_x,
-                                pady=self.content_frm_padding_y)
+        self.second_frame = tk.Frame(self.window, bg=self.bg_color, bd=0, width=1, height=self.wnd_h)
+        self.second_frame.pack_propagate(False)
+        self.second_frame.place(x=self.wnd_w-1, y=0)
 
-        self.title_label = tk.Label(self.content_frame, text=self.title,
-                                    font=("Bahnschrift", self.title_font_size, "bold"), bg=self.main_bg, fg=self.back_bg)
+        self.content_frame = tk.Frame(self.second_frame, bg=self.bg_color, bd=0, height=self.wnd_h)
+        self.content_frame.pack(fill=tk.X,
+                                padx=self.content_frame_padding_x,
+                                pady=self.content_frame_padding_y)
+
+
+        self.title_label = tk.Label(self.content_frame,
+                                    text=self.title,
+                                    font=("Bahnschrift", self.title_font_size, "bold"),
+                                    bg=self.bg_color,
+                                    fg=self.primary_color)
         self.title_label.pack(anchor=tk.W)
 
-        self.canvas = tk.Canvas(self.content_frame, bg=self.main_bg, highlightthickness=0)
-        self.canvas.pack(expand=True)
+
+        self.canvas = tk.Canvas(self.content_frame, bg=self.bg_color, highlightthickness=0)
+        self.canvas.pack()
         self.canvas.update()
-        font = f.Font(family="Cascadia Mono", size=self.text_font_size)
-        message = ScrollingText(self.canvas, message, self.main_frm_w, self.content_frm_padding_x * 2, font=font,
-                                speed=3)
 
-    def animate_window(self, current_x: int, target_x: int, speed: int = 5):
-        speed = speed if current_x < target_x else -speed
-        curr_x = current_x
-        for x in range(current_x, target_x, speed):
-            curr_x = x
-            self.window.geometry(f"+{x}+{self.wnd_y}")
-            self.window.update()
+        font = f.Font(family="Cascadia Mono", size=self.message_font_size)
+        self.message = ScrollingText(canvas=self.canvas,
+                                     text=message,
+                                     visible_area_width=self.wnd_w - self.second_frame_padding_x,
+                                     start_pos=self.second_frame_padding_x + self.message_right_padding,
+                                     font=font,
+                                     delay=10,
+                                     speed=2,
+                                     on_finish_callback=self.on_text_anim_finished_callback)
 
-        if curr_x != target_x:
-            self.window.geometry(f"+{target_x}+{self.wnd_y}")
-            self.window.update()
 
-    def animate_main_frame(self, current_x: int, target_x: int, speed: int = 5):
-        speed = speed if current_x < target_x else -speed
-        curr_x = current_x
-        for x in range(current_x, target_x, speed):
-            curr_x = x
-            self.main_frame.place(x=x, y=self.main_frm_y)
-            self.window.update()
-            time.sleep(0.001)
+    def animate_frame(self, frame: tk.Frame, target_w, delay: float = 0.00001, speed: int = 3):
+        init_w, init_h = frame.winfo_width(), self.wnd_h
+        speed = speed if init_w < target_w else -speed
 
-        if curr_x != target_x:
-            self.main_frame.place(x=target_x, y=self.main_frm_y)
-            self.window.update()
+        for curr_w in range(init_w, target_w, speed):
+            frame.config(width=curr_w)
+            frame.place(x=self.wnd_w-curr_w, y=0)
+            frame.update()
+            time.sleep(delay)
+
+        if frame.winfo_width() != target_w:
+            frame.config(width=target_w)
+            frame.place(x=self.wnd_w - target_w, y=0)
+            frame.update()
 
     def show(self):
-        self.window.geometry(f"{self.wnd_w}x{self.wnd_h}+{0}+{self.wnd_y}")
-        self.animate_window(self.scr_w, self.wnd_x)
+        self.animate_frame(self.first_frame, self.wnd_w)
         time.sleep(0.1)
-        self.animate_main_frame(self.main_frm_x, self.main_frm_padding)
-        self.window.after(5000, self.close)  # type: ignore
+        self.second_frame.lift()
+        self.animate_frame(self.second_frame, self.wnd_w - self.second_frame_padding_x)
+        self.root.after(1000, self.message.update_scroll)
         self.root.mainloop()
 
     def close(self):
-        self.animate_main_frame(self.main_frm_padding, self.main_frm_x)
+        self.animate_frame(self.second_frame, 0)
         time.sleep(0.1)
-        self.animate_window(self.wnd_x, self.scr_w)
+        self.animate_frame(self.first_frame, 0)
         self.window.destroy()
         self.root.destroy()
+
+    def on_text_anim_finished_callback(self):
+        time.sleep(2.5)
+        self.close()
 
 
 if __name__ == '__main__':
@@ -175,24 +199,30 @@ if __name__ == '__main__':
 
 
 # -------------------- globals.py --------------------
-VERSION = "1.0.2"
-OBS_VERSION_STRING = obs.obs_get_version_string()
-OBS_VERSION = (int(i) for i in OBS_VERSION_STRING.split('.'))
-FORCE_MODE_LOCK = Lock()
-FILENAME_PROHIBITED_CHARS = r'/\:"<>*?|%'
-PATH_PROHIBITED_CHARS = r'"<>*?|%'
-DEFAULT_FILENAME_FORMAT = "%NAME_%d.%m.%Y_%H-%M-%S"
-DEFAULT_CUSTOM_NAMES = (
-    {"value": "C:\\Windows\\explorer.exe > Desktop", "selected": False, "hidden": False},
-    {"value": f"{sys.executable} > OBS", "selected": False, "hidden": False}
-)
 user32 = ctypes.windll.user32
+
+
+class CONSTANTS:
+    VERSION = "1.0.7"
+    OBS_VERSION_STRING = obs.obs_get_version_string()
+    OBS_VERSION_RE = re.compile(r'(\d+)\.(\d+)\.(\d+)')
+    OBS_VERSION = [int(i) for i in OBS_VERSION_RE.match(OBS_VERSION_STRING).groups()]
+    CLIPS_FORCE_MODE_LOCK = Lock()
+    VIDEOS_FORCE_MODE_LOCK = Lock()
+    FILENAME_PROHIBITED_CHARS = r'/\:"<>*?|%'
+    PATH_PROHIBITED_CHARS = r'"<>*?|%'
+    DEFAULT_FILENAME_FORMAT = "%NAME_%d.%m.%Y_%H-%M-%S"
+    DEFAULT_CUSTOM_NAMES = (
+        {"value": "C:\\Windows\\explorer.exe > Desktop", "selected": False, "hidden": False},
+        {"value": f"{sys.executable} > OBS", "selected": False, "hidden": False}
+    )
 
 
 class VARIABLES:
     update_available: bool = False
     clip_exe_history: deque[Path, ...] | None = None
     video_exe_history: dict[Path, int] | None = None  # {Path(path/to/executable): active_seconds_amount
+    exe_path_on_video_stopping_event: Path | None = None
     custom_names: dict[Path, str] = {}
     script_settings = None
     hotkey_ids: dict = {}
@@ -200,9 +230,9 @@ class VARIABLES:
 
 
 class ConfigTypes(Enum):
-    PROFILE = 0
-    APP = 1
-    USER = 2
+    PROFILE = 1
+    APP = 2
+    USER = 3
 
 
 class ClipNamingModes(Enum):
@@ -217,61 +247,76 @@ class VideoNamingModes(Enum):
     CURRENT_SCENE = 3
 
 
+class PopupPathDisplayModes(Enum):
+    FULL_PATH = 1
+    FOLDER_AND_FILE = 2
+    JUST_FOLDER = 3
+    JUST_FILE = 4
+
+
 class PropertiesNames:
-    # Properties groups
-    GR_CLIPS_PATHS = "clip_paths"
-    GR_VIDEO_PATHS = "video_paths"
-    GR_NOTIFICATIONS = "notifications"
-    GR_POPUP = "popup"
-    GR_CUSTOM_NAMES = "custom_names"
-    GR_OTHER = "other"
+    # Prop groups
+    GR_CLIPS_PATH_SETTINGS = "clips_path_settings"
+    GR_VIDEOS_PATH_SETTINGS = "videos_path_settings"
+    GR_SOUND_NOTIFICATION_SETTINGS = "sound_notification_settings"
+    GR_POPUP_NOTIFICATION_SETTINGS = "popup_notification_settings"
+    GR_CUSTOM_NAMES_SETTINGS = "custom_names_settings"
+    GR_OTHER_SETTINGS = "other_settings"
 
     # Clips path settings
     PROP_CLIPS_BASE_PATH = "clips_base_path"
-    TEXT_BASE_PATH_INFO = "base_path_info"
+    TXT_CLIPS_BASE_PATH_WARNING = "0"
     PROP_CLIPS_NAMING_MODE = "clips_naming_mode"
-    TXT_CLIPS_HOTKEY_TIP = "clips_hotkey_tip"
+    TXT_CLIPS_HOTKEY_TIP = "1"
     PROP_CLIPS_FILENAME_FORMAT = "clips_filename_format"
-    TXT_CLIPS_FILENAME_FORMAT_ERR = "clips_filename_format_err"
+    TXT_CLIPS_FILENAME_FORMAT_ERR = "2"
     PROP_CLIPS_SAVE_TO_FOLDER = "clips_save_to_folder"
+    PROP_CLIPS_ONLY_FORCE_MODE = "clips_only_force_mode"
 
     # Videos path settings
-    PROP_VIDEOS_NAMING_MODE = "video_naming_mode"
-    TXT_VIDEOS_HOTKEY_TIP = "videos_hotkey_tip"
+    PROP_VIDEOS_NAMING_MODE = "videos_naming_mode"
+    TXT_VIDEOS_HOTKEY_TIP = "3"
     PROP_VIDEOS_FILENAME_FORMAT = "videos_filename_format"
-    TXT_VIDEOS_FILENAME_FORMAT_ERR = "videos_filename_format_err"
+    TXT_VIDEOS_FILENAME_FORMAT_ERR = "4"
     PROP_VIDEOS_SAVE_TO_FOLDER = "videos_save_to_folder"
     PROP_VIDEOS_ONLY_FORCE_MODE = "videos_only_force_mode"
 
     # Sound notification settings
-    PROP_NOTIFICATION_ON_SUCCESS = "notification_on_success"
-    PROP_NOTIFICATION_ON_SUCCESS_PATH = "notification_on_success_file"
-    PROP_NOTIFICATION_ON_FAILURE = "notification_on_failure"
-    PROP_NOTIFICATION_ON_FAILURE_PATH = "notification_on_failure_file"
+    PROP_NOTIFY_CLIPS_ON_SUCCESS = "notify_clips_on_success"
+    PROP_NOTIFY_CLIPS_ON_SUCCESS_PATH = "notify_clips_on_success_path"
+    PROP_NOTIFY_CLIPS_ON_FAILURE = "notify_clips_on_failure"
+    PROP_NOTIFY_CLIPS_ON_FAILURE_PATH = "notify_clips_on_failure_path"
+    PROP_NOTIFY_VIDEOS_ON_SUCCESS = "notify_videos_on_success"
+    PROP_NOTIFY_VIDEOS_ON_SUCCESS_PATH = "notify_videos_on_success_path"
+    PROP_NOTIFY_VIDEOS_ON_FAILURE = "notify_videos_on_failure"
+    PROP_NOTIFY_VIDEOS_ON_FAILURE_PATH = "notify_videos_on_failure_path"
 
     # Popup notification settings
-    PROP_POPUP_ON_SUCCESS = "prop_popup_on_success"
-    PROP_POPUP_ON_FAILURE = "prop_popup_on_failure"
+    PROP_POPUP_CLIPS_ON_SUCCESS = "popup_clips_on_success"
+    PROP_POPUP_CLIPS_ON_FAILURE = "popup_clips_on_failure"
+    PROP_POPUP_VIDEOS_ON_SUCCESS = "popup_videos_on_success"
+    PROP_POPUP_VIDEOS_ON_FAILURE = "popup_videos_on_failure"
+    PROP_POPUP_SHOW_PATH_TYPE = "prop_popup_show_path_type"
 
     # Custom names settings
     PROP_CUSTOM_NAMES_LIST = "custom_names_list"
-    TXT_CUSTOM_NAME_DESC = "custom_names_desc"
+    TXT_CUSTOM_NAMES_DESC = "5"
 
     # Custom names parsing error texts
-    TXT_CUSTOM_NAMES_PATH_EXISTS = "custom_names_path_exists_err"
-    TXT_CUSTOM_NAMES_INVALID_FORMAT = "custom_names_invalid_format_err"
-    TXT_CUSTOM_NAMES_INVALID_CHARACTERS = "custom_names_invalid_characters_err"
+    TXT_CUSTOM_NAMES_PATH_EXISTS = "6"
+    TXT_CUSTOM_NAMES_INVALID_FORMAT = "7"
+    TXT_CUSTOM_NAMES_INVALID_CHARACTERS = "8"
 
     # Export / Import custom names section
     PROP_CUSTOM_NAMES_EXPORT_PATH = "custom_names_export_path"
-    BTN_CUSTOM_NAMES_EXPORT = "btn_custom_names_export"
+    BTN_CUSTOM_NAMES_EXPORT = "9"
     PROP_CUSTOM_NAMES_IMPORT_PATH = "custom_names_import_path"
-    BTN_CUSTOM_NAMES_IMPORT = "btn_custom_names_import"
+    BTN_CUSTOM_NAMES_IMPORT = "10"
 
     # Other section
     PROP_RESTART_BUFFER = "restart_buffer"
     PROP_RESTART_BUFFER_LOOP = "restart_buffer_loop"
-    TXT_RESTART_BUFFER_LOOP = "txt_restart_buffer_loop"
+    TXT_RESTART_BUFFER_LOOP = "11"
 
     # Hotkeys
     HK_SAVE_BUFFER_MODE_1 = "save_buffer_force_mode_1"
@@ -301,33 +346,21 @@ class CustomNamePathAlreadyExists(CustomNameParsingError):
     """
     Exception raised when a custom name is already exists.
     """
-    def __init__(self, index):
-        """
-        :param index: custom name index.
-        """
-        super().__init__(index)
+    ...
 
 
 class CustomNameInvalidCharacters(CustomNameParsingError):
     """
     Exception raised when a custom name has invalid characters.
     """
-    def __init__(self, index):
-        """
-        :param index: custom name index.
-        """
-        super().__init__(index)
+    ...
 
 
 class CustomNameInvalidFormat(CustomNameParsingError):
     """
     Exception raised when a custom name is invalid format.
     """
-    def __init__(self, index):
-        """
-        :param index: custom name index.
-        """
-        super().__init__(index)
+    ...
 
 
 # -------------------- updates_check.py --------------------
@@ -339,16 +372,13 @@ def get_latest_release_tag() -> dict | None:
             if response.status == 200:
                 data = json.load(response)
                 return data.get('tag_name')
-    # except:
-    #         _print(f"Failed to check updates: bad response status code: {e.code}")
     except:
         _print(f"Failed to check updates.")
         _print(traceback.format_exc())
-
     return None
 
 
-def check_updates(current_version):
+def check_updates(current_version: str):
     latest_version = get_latest_release_tag()
     _print(latest_version)
     if latest_version and f'v{current_version}' != latest_version:
@@ -432,11 +462,11 @@ def setup_clip_paths_settings(group_obj):
         description="Base path for clips",
         type=obs.OBS_PATH_DIRECTORY,
         filter=None,
-        default_path="C:\\"
+        default_path=str(get_base_path(from_obs_config=True))
     )
     t = obs.obs_properties_add_text(
         props=group_obj,
-        name=PN.TEXT_BASE_PATH_INFO,
+        name=PN.TXT_CLIPS_BASE_PATH_WARNING,
         description="The path must be on the same disk as the path for OBS records "
                     "(File -> Settings -> Output -> Recording -> Recording Path).\n"
                     "Otherwise, the script will not be able to move the clip to the correct folder.",
@@ -444,8 +474,8 @@ def setup_clip_paths_settings(group_obj):
     )
     obs.obs_property_text_set_info_type(t, obs.OBS_TEXT_INFO_WARNING)
 
-    # ----- Clips name condition -----
-    filename_condition = obs.obs_properties_add_list(
+    # ----- Clip naming mode -----
+    clip_naming_mode_prop = obs.obs_properties_add_list(
         props=group_obj,
         name=PN.PROP_CLIPS_NAMING_MODE,
         description="Clip name based on",
@@ -453,19 +483,19 @@ def setup_clip_paths_settings(group_obj):
         format=obs.OBS_COMBO_FORMAT_INT
     )
     obs.obs_property_list_add_int(
-        p=filename_condition,
-        name="the name of an active app (.exe file name) at the moment of clip saving",
-        val=1
+        p=clip_naming_mode_prop,
+        name="the name of an active app (.exe file name) at the moment of clip saving;",
+        val=ClipNamingModes.CURRENT_PROCESS.value()
     )
     obs.obs_property_list_add_int(
-        p=filename_condition,
-        name="the name of an app (.exe file name) that was active most of the time during the clip recording",
-        val=2
+        p=clip_naming_mode_prop,
+        name="the name of an app (.exe file name) that was active most of the time during the clip recording;",
+        val=ClipNamingModes.MOST_RECORDED_PROCESS.value()
     )
     obs.obs_property_list_add_int(
-        p=filename_condition,
-        name="the name of the current scene",
-        val=3
+        p=clip_naming_mode_prop,
+        name="the name of the current scene;",
+        val=ClipNamingModes.CURRENT_SCENE.value()
     )
 
     t = obs.obs_properties_add_text(
@@ -499,7 +529,7 @@ def setup_clip_paths_settings(group_obj):
     obs.obs_properties_add_bool(
         props=group_obj,
         name=PN.PROP_CLIPS_SAVE_TO_FOLDER,
-        description="Create different folders for different clip names",
+        description="Sort clips into folders by application or scene",
     )
 
     # ----- Callbacks -----
@@ -577,12 +607,12 @@ def setup_video_paths_settings(group_obj):
 def setup_notifications_settings(group_obj):
     notification_success_prop = obs.obs_properties_add_bool(
         props=group_obj,
-        name=PN.PROP_NOTIFICATION_ON_SUCCESS,
+        name=PN.PROP_NOTIFY_CLIPS_ON_SUCCESS,
         description="On success"
     )
     success_path_prop = obs.obs_properties_add_path(
         props=group_obj,
-        name=PN.PROP_NOTIFICATION_ON_SUCCESS_PATH,
+        name=PN.PROP_NOTIFY_CLIPS_ON_SUCCESS_PATH,
         description="",
         type=obs.OBS_PATH_FILE,
         filter=None,
@@ -591,12 +621,12 @@ def setup_notifications_settings(group_obj):
 
     notification_failure_prop = obs.obs_properties_add_bool(
         props=group_obj,
-        name=PN.PROP_NOTIFICATION_ON_FAILURE,
+        name=PN.PROP_NOTIFY_CLIPS_ON_FAILURE,
         description="On failure"
     )
     failure_path_prop = obs.obs_properties_add_path(
         props=group_obj,
-        name=PN.PROP_NOTIFICATION_ON_FAILURE_PATH,
+        name=PN.PROP_NOTIFY_CLIPS_ON_FAILURE_PATH,
         description="",
         type=obs.OBS_PATH_FILE,
         filter=None,
@@ -604,9 +634,9 @@ def setup_notifications_settings(group_obj):
     )
 
     obs.obs_property_set_visible(success_path_prop,
-                                 obs.obs_data_get_bool(VARIABLES.script_settings, PN.PROP_NOTIFICATION_ON_SUCCESS))
+                                 obs.obs_data_get_bool(VARIABLES.script_settings, PN.PROP_NOTIFY_CLIPS_ON_SUCCESS))
     obs.obs_property_set_visible(failure_path_prop,
-                                 obs.obs_data_get_bool(VARIABLES.script_settings, PN.PROP_NOTIFICATION_ON_FAILURE))
+                                 obs.obs_data_get_bool(VARIABLES.script_settings, PN.PROP_NOTIFY_CLIPS_ON_FAILURE))
 
     # ----- Callbacks ------
     obs.obs_property_set_modified_callback(notification_success_prop, update_notifications_menu_callback)
@@ -616,13 +646,13 @@ def setup_notifications_settings(group_obj):
 def setup_popup_notification_settings(group_obj):
     obs.obs_properties_add_bool(
         props=group_obj,
-        name=PN.PROP_POPUP_ON_SUCCESS,
+        name=PN.PROP_POPUP_CLIPS_ON_SUCCESS,
         description="On success"
     )
 
     obs.obs_properties_add_bool(
         props=group_obj,
-        name=PN.PROP_POPUP_ON_FAILURE,
+        name=PN.PROP_POPUP_CLIPS_ON_FAILURE,
         description="On failure"
     )
 
@@ -630,7 +660,7 @@ def setup_popup_notification_settings(group_obj):
 def setup_custom_names_settings(group_obj):
     obs.obs_properties_add_text(
         props=group_obj,
-        name=PN.TXT_CUSTOM_NAME_DESC,
+        name=PN.TXT_CUSTOM_NAMES_DESC,
         description="Since the executable name doesn't always match the name of the application/game "
                     "(e.g. the game is called Deadlock, but the executable is project8.exe), "
                     "you can set custom names for clips based on the name of the executable / folder "
@@ -778,10 +808,10 @@ def script_properties():
     # ----- Groups -----
     obs.obs_properties_add_group(p, PN.GR_CLIPS_PATHS, "Clip path settings", obs.OBS_PROPERTY_GROUP, clip_path_gr)
     obs.obs_properties_add_group(p, PN.GR_VIDEO_PATHS, "Video path settings", obs.OBS_PROPERTY_GROUP, video_path_gr)
-    obs.obs_properties_add_group(p, PN.GR_NOTIFICATIONS, "Sound notifications", obs.OBS_GROUP_CHECKABLE, notification_gr)
-    obs.obs_properties_add_group(p, PN.GR_POPUP, "Popup notifications", obs.OBS_GROUP_CHECKABLE, popup_gr)
-    obs.obs_properties_add_group(p, PN.GR_CUSTOM_NAMES, "Custom names", obs.OBS_GROUP_NORMAL, custom_names_gr)
-    obs.obs_properties_add_group(p, PN.GR_OTHER, "Other", obs.OBS_GROUP_NORMAL, other_gr)
+    obs.obs_properties_add_group(p, PN.GR_SOUND_NOTIFICATION_SETTINGS, "Sound notifications", obs.OBS_GROUP_CHECKABLE, notification_gr)
+    obs.obs_properties_add_group(p, PN.GR_POPUP_NOTIFICATION_SETTINGS, "Popup notifications", obs.OBS_GROUP_CHECKABLE, popup_gr)
+    obs.obs_properties_add_group(p, PN.GR_CUSTOM_NAMES_SETTINGS, "Custom names", obs.OBS_GROUP_NORMAL, custom_names_gr)
+    obs.obs_properties_add_group(p, PN.GR_OTHER_SETTINGS, "Other", obs.OBS_GROUP_NORMAL, other_gr)
 
     # ------ Setup properties ------
     setup_clip_paths_settings(clip_path_gr)
@@ -878,11 +908,11 @@ def update_notifications_menu_callback(p, prop, data):
     Updates notifications settings menu.
     If notification is enabled, shows path widget.
     """
-    success_path_prop = obs.obs_properties_get(p, PN.PROP_NOTIFICATION_ON_SUCCESS_PATH)
-    failure_path_prop = obs.obs_properties_get(p, PN.PROP_NOTIFICATION_ON_FAILURE_PATH)
+    success_path_prop = obs.obs_properties_get(p, PN.PROP_NOTIFY_CLIPS_ON_SUCCESS_PATH)
+    failure_path_prop = obs.obs_properties_get(p, PN.PROP_NOTIFY_CLIPS_ON_FAILURE_PATH)
 
-    on_success = obs.obs_data_get_bool(data, PN.PROP_NOTIFICATION_ON_SUCCESS)
-    on_failure = obs.obs_data_get_bool(data, PN.PROP_NOTIFICATION_ON_FAILURE)
+    on_success = obs.obs_data_get_bool(data, PN.PROP_NOTIFY_CLIPS_ON_SUCCESS)
+    on_failure = obs.obs_data_get_bool(data, PN.PROP_NOTIFY_CLIPS_ON_FAILURE)
 
     obs.obs_property_set_visible(success_path_prop, on_success)
     obs.obs_property_set_visible(failure_path_prop, on_failure)
@@ -894,7 +924,7 @@ def check_base_path_callback(p, prop, data):
     Checks base path is in the same disk as OBS recordings path.
     If it's not - sets OBS records path as base path for clips and shows warning.
     """
-    warn_text = obs.obs_properties_get(p, PN.TEXT_BASE_PATH_INFO)
+    warn_text = obs.obs_properties_get(p, PN.TXT_CLIPS_BASE_PATH_WARNING)
 
     obs_records_path = Path(get_base_path(from_obs_config=True))
     curr_path = Path(obs.obs_data_get_string(data, PN.PROP_CLIPS_BASE_PATH))
@@ -970,7 +1000,7 @@ def get_active_window_pid() -> int | None:
     return pid.value
 
 
-def get_executable_path(pid) -> str:
+def get_executable_path(pid: int) -> Path:
     """
     Gets path of process's executable.
 
@@ -987,24 +1017,24 @@ def get_executable_path(pid) -> str:
     result = ctypes.windll.psapi.GetModuleFileNameExW(process_handle, None, filename_buffer, 260)
     ctypes.windll.kernel32.CloseHandle(process_handle)
     if result:
-        return filename_buffer.value
+        return Path(filename_buffer.value)
     else:
         raise RuntimeError(f"Cannot get executable path for process {pid}.")
 
 
-def play_sound(path: str):
+def play_sound(path: str | Path):
     """
     Plays sound using windows engine.
 
     :param path: path to sound (.wav)
     """
     try:
-        winsound.PlaySound(path, winsound.SND_ASYNC)
+        winsound.PlaySound(str(path), winsound.SND_ASYNC)
     except:
         pass
 
 
-def get_time_since_last_input() -> float:
+def get_time_since_last_input() -> int:
     """
     Gets the time (in seconds) since the last mouse or keyboard input.
     """
@@ -1014,7 +1044,7 @@ def get_time_since_last_input() -> float:
     if ctypes.windll.user32.GetLastInputInfo(ctypes.byref(last_input_info)):
         current_time = ctypes.windll.kernel32.GetTickCount()
         idle_time_ms = current_time - last_input_info.dwTime
-        return idle_time_ms / 1000.0
+        return idle_time_ms // 1000
     else:
         return 0
 
@@ -1039,11 +1069,10 @@ def get_obs_config(section_name: str | None = None,
     elif config_type is ConfigTypes.APP:
         cfg = obs.obs_frontend_get_global_config()
     else:
-        if OBS_VERSION[0] < 31:
+        if CONSTANTS.OBS_VERSION[0] < 31:
             cfg = obs.obs_frontend_get_global_config()
         else:
             cfg = obs.obs_frontend_get_user_config()
-
 
     if not section_name or not param_name:
         return cfg
@@ -1085,7 +1114,7 @@ def get_current_scene_name() -> str:
     return name
 
 
-def get_base_path(from_obs_config: bool = False) -> str:
+def get_base_path(from_obs_config: bool = False) -> Path:
     """
     Returns current base path for clips.
 
@@ -1097,13 +1126,13 @@ def get_base_path(from_obs_config: bool = False) -> str:
         # If PN.PROP_CLIPS_BASE_PATH is not saved in the script config, then it has a default value,
         # which is the value from the OBS config.
         if script_path:
-            return script_path
+            return Path(script_path)
 
     config_mode = get_obs_config("Output", "Mode")
     if config_mode == "Simple":
-        return get_obs_config("SimpleOutput", "FilePath")
+        return Path(get_obs_config("SimpleOutput", "FilePath"))
     else:
-        return get_obs_config("AdvOut", "RecFilePath")
+        return Path(get_obs_config("AdvOut", "RecFilePath"))
 
 
 def get_replay_buffer_max_time() -> int:
@@ -1112,14 +1141,14 @@ def get_replay_buffer_max_time() -> int:
     """
     config_mode = get_obs_config("Output", "Mode")
     if config_mode == "Simple":
-        return get_obs_config("SimpleOutput", "RecRBTime", value_type=int)
+        return get_obs_config("SimpleOutput", "RecRBTime", int)
     else:
-        return get_obs_config("AdvOut", "RecRBTime", value_type=int)
+        return get_obs_config("AdvOut", "RecRBTime", int)
 
 
 def restart_replay_buffering():
     """
-    Restart replay buffering, obviously -_-
+    Restarts replay buffering, obviously -_-
     """
     _print("Stopping replay buffering...")
     replay_output = obs.obs_frontend_get_replay_buffer_output()
@@ -1138,23 +1167,23 @@ def notify(success: bool, clip_path: str):
     """
     Plays and shows success / failure notification if it's enabled in notifications settings.
     """
-    sound_notifications = obs.obs_data_get_bool(VARIABLES.script_settings, PN.GR_NOTIFICATIONS)
-    popup_notifications = obs.obs_data_get_bool(VARIABLES.script_settings, PN.GR_POPUP)
+    sound_notifications = obs.obs_data_get_bool(VARIABLES.script_settings, PN.GR_SOUND_NOTIFICATION_SETTINGS)
+    popup_notifications = obs.obs_data_get_bool(VARIABLES.script_settings, PN.GR_POPUP_NOTIFICATION_SETTINGS)
     python_exe = os.path.join(get_obs_config("Python", "Path64bit", str, ConfigTypes.APP), "pythonw.exe")
 
     if success:
-        if sound_notifications and obs.obs_data_get_bool(VARIABLES.script_settings, PN.PROP_NOTIFICATION_ON_SUCCESS):
-            path = obs.obs_data_get_string(VARIABLES.script_settings, PN.PROP_NOTIFICATION_ON_SUCCESS_PATH)
+        if sound_notifications and obs.obs_data_get_bool(VARIABLES.script_settings, PN.PROP_NOTIFY_CLIPS_ON_SUCCESS):
+            path = obs.obs_data_get_string(VARIABLES.script_settings, PN.PROP_NOTIFY_CLIPS_ON_SUCCESS_PATH)
             play_sound(path)
 
-        if popup_notifications and obs.obs_data_get_bool(VARIABLES.script_settings, PN.PROP_POPUP_ON_SUCCESS):
+        if popup_notifications and obs.obs_data_get_bool(VARIABLES.script_settings, PN.PROP_POPUP_CLIPS_ON_SUCCESS):
             subprocess.Popen([python_exe, __file__, "Clip saved", f"Clip saved to {clip_path}"])
     else:
-        if sound_notifications and obs.obs_data_get_bool(VARIABLES.script_settings, PN.PROP_NOTIFICATION_ON_FAILURE):
-            path = obs.obs_data_get_string(VARIABLES.script_settings, PN.PROP_NOTIFICATION_ON_FAILURE_PATH)
+        if sound_notifications and obs.obs_data_get_bool(VARIABLES.script_settings, PN.PROP_NOTIFY_CLIPS_ON_FAILURE):
+            path = obs.obs_data_get_string(VARIABLES.script_settings, PN.PROP_NOTIFY_CLIPS_ON_FAILURE_PATH)
             play_sound(path)
 
-        if popup_notifications and obs.obs_data_get_bool(VARIABLES.script_settings, PN.PROP_POPUP_ON_FAILURE):
+        if popup_notifications and obs.obs_data_get_bool(VARIABLES.script_settings, PN.PROP_POPUP_CLIPS_ON_FAILURE):
             subprocess.Popen([python_exe, __file__, "Clip not saved", f"More in the logs.", "#C00000"])
 
 
@@ -1362,10 +1391,10 @@ def save_buffer_with_force_mode(mode: int):
     if not obs.obs_frontend_replay_buffer_active():
         return
 
-    if FORCE_MODE_LOCK.locked():
+    if CLIPS_FORCE_MODE_LOCK.locked():
         return
 
-    FORCE_MODE_LOCK.acquire()
+    CLIPS_FORCE_MODE_LOCK.acquire()
     VARIABLES.force_mode = mode
     obs.obs_frontend_replay_buffer_save()
 
@@ -1419,7 +1448,7 @@ def on_buffer_save_callback(event):
 
         if VARIABLES.force_mode:
             VARIABLES.force_mode = 0
-            FORCE_MODE_LOCK.release()
+            CLIPS_FORCE_MODE_LOCK.release()
         notify(True, str(path))
     except:
         _print("An error occurred while moving file to the new destination.")
@@ -1519,24 +1548,24 @@ def append_video_exe_history():
 # -------------------- hotkeys.py --------------------
 def load_hotkeys():
     hk1_id = obs.obs_hotkey_register_frontend(PN.HK_SAVE_BUFFER_MODE_1,
-                                              "[Smart Replays] Save buffer (force mode 1)",
+                                              "[Smart Replays] Save buffer (active exe)",
                                               lambda pressed: save_buffer_with_force_mode(1) if pressed else None)
 
     hk2_id = obs.obs_hotkey_register_frontend(PN.HK_SAVE_BUFFER_MODE_2,
-                                              "[Smart Replays] Save buffer (force mode 2)",
+                                              "[Smart Replays] Save buffer (most recorded exe)",
                                               lambda pressed: save_buffer_with_force_mode(2) if pressed else None)
 
     hk3_id = obs.obs_hotkey_register_frontend(PN.HK_SAVE_BUFFER_MODE_3,
-                                              "[Smart Replays] Save buffer (force mode 3)",
+                                              "[Smart Replays] Save buffer (active scene)",
                                               lambda pressed: save_buffer_with_force_mode(3) if pressed else None)
 
     VARIABLES.hotkey_ids.update({PN.HK_SAVE_BUFFER_MODE_1: hk1_id,
                                  PN.HK_SAVE_BUFFER_MODE_2: hk2_id,
                                  PN.HK_SAVE_BUFFER_MODE_3: hk3_id})
 
-    for key_name in VARIABLES.hotkey_ids:
-        key_data = obs.obs_data_get_array(VARIABLES.script_settings, key_name)
-        obs.obs_hotkey_load(VARIABLES.hotkey_ids[key_name], key_data)
+    for hotkey_name, hotkey_id in VARIABLES.hotkey_ids.items():
+        key_data = obs.obs_data_get_array(VARIABLES.script_settings, hotkey_name)
+        obs.obs_hotkey_load(hotkey_id, key_data)
         obs.obs_data_array_release(key_data)
 
 
@@ -1552,8 +1581,8 @@ def script_defaults(s):
     obs.obs_data_set_default_string(s, PN.PROP_VIDEOS_FILENAME_FORMAT, DEFAULT_FILENAME_FORMAT)
     obs.obs_data_set_default_bool(s, PN.PROP_VIDEOS_SAVE_TO_FOLDER, True)
 
-    obs.obs_data_set_default_bool(s, PN.PROP_NOTIFICATION_ON_SUCCESS, False)
-    obs.obs_data_set_default_bool(s, PN.PROP_NOTIFICATION_ON_FAILURE, False)
+    obs.obs_data_set_default_bool(s, PN.PROP_NOTIFY_CLIPS_ON_SUCCESS, False)
+    obs.obs_data_set_default_bool(s, PN.PROP_NOTIFY_CLIPS_ON_FAILURE, False)
 
     obs.obs_data_set_default_int(s, PN.PROP_RESTART_BUFFER_LOOP, 3600)
     obs.obs_data_set_default_bool(s, PN.PROP_RESTART_BUFFER, True)
