@@ -20,7 +20,7 @@ class CustomNameParsingError(Exception):
         """
         :param index: custom name index.
         """
-        super().__init__(Exception)
+        super(Exception).__init__()
         self.index = index
 
 
@@ -28,18 +28,15 @@ class CustomNamePathAlreadyExists(CustomNameParsingError):
     """
     Exception raised when a custom name is already exists.
     """
-    ...
 
 
 class CustomNameInvalidCharacters(CustomNameParsingError):
     """
     Exception raised when a custom name has invalid characters.
     """
-    ...
 
 
 class CustomNameInvalidFormat(CustomNameParsingError):
     """
     Exception raised when a custom name is invalid format.
     """
-    ...

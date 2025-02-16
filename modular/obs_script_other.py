@@ -12,16 +12,10 @@
 #  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 #  GNU Affero General Public License for more details.
 
-from .globals import (VARIABLES,
-                      VERSION,
-                      DEFAULT_FILENAME_FORMAT,
-                      DEFAULT_CUSTOM_NAMES,
-                      ClipNamingModes,
-                      VideoNamingModes,
-                      PN)
+from .globals import VARIABLES, CONSTANTS, ClipNamingModes, VideoNamingModes, PopupPathDisplayModes, PN
 
 from .tech import _print
-from .obs_related import get_obs_config
+from .obs_related import get_base_path
 from .other_callbacks import restart_replay_buffering_callback, append_clip_exe_history
 from .obs_events_callbacks import (on_buffer_save_callback,
                                    on_buffer_recording_started_callback,
@@ -39,23 +33,27 @@ import json
 
 def script_defaults(s):
     _print("Loading default values...")
-    obs.obs_data_set_default_string(s, PN.PROP_CLIPS_BASE_PATH, get_obs_config("SimpleOutput", "FilePath"))
+    obs.obs_data_set_default_string(s, PN.PROP_CLIPS_BASE_PATH, str(get_base_path()))
     obs.obs_data_set_default_int(s, PN.PROP_CLIPS_NAMING_MODE, ClipNamingModes.CURRENT_PROCESS.value)
-    obs.obs_data_set_default_string(s, PN.PROP_CLIPS_FILENAME_FORMAT, DEFAULT_FILENAME_FORMAT)
+    obs.obs_data_set_default_string(s, PN.PROP_CLIPS_FILENAME_FORMAT, CONSTANTS.DEFAULT_FILENAME_FORMAT)
     obs.obs_data_set_default_bool(s, PN.PROP_CLIPS_SAVE_TO_FOLDER, True)
+    obs.obs_data_set_default_string(s, PN.PROP_CLIPS_LINKS_FOLDER_PATH, str(get_base_path() / 'links'))
 
-    obs.obs_data_set_default_int(s, PN.PROP_VIDEOS_NAMING_MODE, VideoNamingModes.MOST_RECORDED_PROCESS.value)
-    obs.obs_data_set_default_string(s, PN.PROP_VIDEOS_FILENAME_FORMAT, DEFAULT_FILENAME_FORMAT)
-    obs.obs_data_set_default_bool(s, PN.PROP_VIDEOS_SAVE_TO_FOLDER, True)
+    # obs.obs_data_set_default_int(s, PN.PROP_VIDEOS_NAMING_MODE, VideoNamingModes.MOST_RECORDED_PROCESS.value)
+    # obs.obs_data_set_default_string(s, PN.PROP_VIDEOS_FILENAME_FORMAT, CONSTANTS.DEFAULT_FILENAME_FORMAT)
+    # obs.obs_data_set_default_bool(s, PN.PROP_VIDEOS_SAVE_TO_FOLDER, True)
 
     obs.obs_data_set_default_bool(s, PN.PROP_NOTIFY_CLIPS_ON_SUCCESS, False)
     obs.obs_data_set_default_bool(s, PN.PROP_NOTIFY_CLIPS_ON_FAILURE, False)
+    obs.obs_data_set_default_bool(s, PN.PROP_POPUP_CLIPS_ON_SUCCESS, False)
+    obs.obs_data_set_default_bool(s, PN.PROP_POPUP_CLIPS_ON_FAILURE, False)
+    obs.obs_data_set_default_int(s, PN.PROP_POPUP_PATH_DISPLAY_MODE, PopupPathDisplayModes.FULL_PATH.value)
 
     obs.obs_data_set_default_int(s, PN.PROP_RESTART_BUFFER_LOOP, 3600)
     obs.obs_data_set_default_bool(s, PN.PROP_RESTART_BUFFER, True)
 
     arr = obs.obs_data_array_create()
-    for index, i in enumerate(DEFAULT_CUSTOM_NAMES):
+    for index, i in enumerate(CONSTANTS.DEFAULT_CUSTOM_NAMES):
         data = obs.obs_data_create_from_json(json.dumps(i))
         obs.obs_data_array_insert(arr, index, data)
 
@@ -83,7 +81,7 @@ def script_save(settings):
 def script_load(script_settings):
     _print("Loading script...")
     VARIABLES.script_settings = script_settings
-    VARIABLES.update_available = check_updates(VERSION)
+    # VARIABLES.update_available = check_updates(CONSTANTS.VERSION)  # todo: for future updates
 
     json_settings = json.loads(obs.obs_data_get_json(script_settings))
     load_custom_names(json_settings)
@@ -92,9 +90,9 @@ def script_load(script_settings):
     obs.obs_frontend_add_event_callback(on_buffer_recording_started_callback)
     obs.obs_frontend_add_event_callback(on_buffer_recording_stopped_callback)
 
-    obs.obs_frontend_add_event_callback(on_video_recording_started_callback)
-    obs.obs_frontend_add_event_callback(on_video_recording_stopping_callback)
-    obs.obs_frontend_add_event_callback(on_video_recording_stopped_callback)
+    # obs.obs_frontend_add_event_callback(on_video_recording_started_callback)  # todo: for future updates
+    # obs.obs_frontend_add_event_callback(on_video_recording_stopping_callback)  # todo: for future updates
+    # obs.obs_frontend_add_event_callback(on_video_recording_stopped_callback)  # todo: for future updates
     load_hotkeys()
 
     if obs.obs_frontend_replay_buffer_active():
@@ -121,7 +119,7 @@ Smart Replays is an OBS script whose main purpose is to save clips with differen
 </div>
 
 <div style="font-size: 10pt; text-align: left; margin-top: 20px;">
-Version: {VERSION}<br/>
+Version: {CONSTANTS.VERSION}<br/>
 Developed by: Qvvonk<br/>
 </div>
 """

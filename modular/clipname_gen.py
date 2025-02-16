@@ -12,7 +12,7 @@
 #  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 #  GNU Affero General Public License for more details.
 
-from .globals import VARIABLES, CONSTANTS, PN
+from .globals import VARIABLES, CONSTANTS, PN, ClipNamingModes
 
 from .tech import get_active_window_pid, get_executable_path, _print
 from .obs_related import get_current_scene_name
@@ -23,43 +23,45 @@ from datetime import datetime
 import traceback
 
 
-def gen_clip_base_name(mode: int) -> str:
+def gen_clip_base_name(mode: ClipNamingModes | None = None) -> str:
     """
-    Generates clip base name based on clip naming mode.
-    It's NOT generates new path for clip.
+    Generates the base name of the clip based on the selected naming mode.
+    It does NOT generate a new path for the clip or filename, only its base name.
 
-    :param mode: Clip naming mode. If 0 - gets mode from script config.
+    :param mode: Clip naming mode. If None, the mode is fetched from the script config.
+                 If a value is provided, it overrides the configs value.
+    :return: The base name of the clip based on the selected naming mode.
     """
     _print("Generating clip base name...")
-    mode = obs.obs_data_get_int(VARIABLES.script_settings, PN.PROP_CLIPS_NAMING_MODE) if not mode else mode
+    mode = obs.obs_data_get_int(VARIABLES.script_settings, PN.PROP_CLIPS_NAMING_MODE) if mode is None else mode
+    mode = ClipNamingModes(mode)
 
-    if mode in [1, 2]:
-        if mode == 1:
+    if mode in [ClipNamingModes.CURRENT_PROCESS, ClipNamingModes.MOST_RECORDED_PROCESS]:
+        if mode is ClipNamingModes.CURRENT_PROCESS:
             _print("Clip file name depends on the name of an active app (.exe file name) at the moment of clip saving.")
             pid = get_active_window_pid()
             executable_path = get_executable_path(pid)
-            executable_path_obj = Path(executable_path)
             _print(f"Current active window process ID: {pid}")
             _print(f"Current active window executable: {executable_path}")
 
-        else:  # if mode == 2
+        else:
             _print("Clip file name depends on the name of an app (.exe file name) "
                    "that was active most of the time during the clip recording.")
             if VARIABLES.clip_exe_history:
                 executable_path = max(VARIABLES.clip_exe_history, key=VARIABLES.clip_exe_history.count)
             else:
                 executable_path = get_executable_path(get_active_window_pid())
-            executable_path_obj = Path(executable_path)
 
-
-        if custom_name := get_name_from_custom_names(executable_path):
-            return custom_name
+        _print(f'Searching for {executable_path} in aliases list...')
+        if alias := get_exe_alias(executable_path, VARIABLES.custom_names):
+            _print(f'Alias found: {alias}.')
+            return alias
         else:
-            _print(f"{executable_path} or its parents weren't found in custom names list. "
-                   f"Assigning the name of the executable: {executable_path_obj.stem}")
-            return executable_path_obj.stem
+            _print(f"{executable_path} or its parents weren't found in aliases list. "
+                   f"Assigning the name of the executable: {executable_path.stem}")
+            return executable_path.stem
 
-    elif mode == 3:
+    else:
         _print("Clip filename depends on the name of the current scene name.")
         return get_current_scene_name()
 
@@ -86,55 +88,36 @@ def get_exe_alias(executable_path: str | Path, aliases_dict: dict[Path, str]) ->
 
 
 
-def format_filename(name: str, dt: datetime | None = None,
-                    force_default_template: bool = False, raise_exception: bool = False) -> str:
+def gen_filename(base_name: str, template: str, dt: datetime | None = None) -> str:
     """
-    Formats the clip file name based on the template.
-    If the template is invalid, uses the default template.
+    Generates a file name based on the template.
+    If the template is invalid or formatting fails, raises ValueError.
+    If the generated name contains prohibited characters, raises SyntaxError.
 
-    :param name: base name.
-    :param dt: datetime obj.
-    :param force_default_template: use the default template even if the template in the settings is valid.
-        This param uses only in this function (in recursive call) and only if something wrong with users template.
-    :param raise_exception: raise exception if template is invalid instead of using default template.
-        This param uses when this function called from properties callback to check template imputed by user.
+    :param base_name: Base name for the file.
+    :param template: Template for generating the file name.
+    :param dt: Optional datetime object; uses current time if None.
+    :return: Formatted file name.
     """
-    if dt is None:
-        dt = datetime.now()
-
-    template = obs.obs_data_get_string(VARIABLES.script_settings, PN.PROP_CLIPS_FILENAME_FORMAT)
-
     if not template:
-        if raise_exception:
-            raise ValueError
-        template = CONSTANTS.DEFAULT_FILENAME_FORMAT
+        raise ValueError
 
-    if force_default_template:
-        template = CONSTANTS.DEFAULT_FILENAME_FORMAT
-
-    filename = template.replace("%NAME", name)
+    dt = dt or datetime.now()
+    filename = template.replace("%NAME", base_name)
 
     try:
         filename = dt.strftime(filename)
-    except:
-        _print("An error occurred while formatting filename.")
+    except Exception as e:
+        _print(f"An error occurred while generating the file name using the template {template}.")
         _print(traceback.format_exc())
-        if raise_exception:
-            raise ValueError
+        raise ValueError from e
 
-        _print("Using default filename format.")
-        return format_filename(name, dt, force_default_template=True)
-
-    for i in CONSTANTS.FILENAME_PROHIBITED_CHARS:
-        if i in filename:
-            if raise_exception:
-                raise SyntaxError
-            filename = filename.replace(i, "")
-
+    if any(i in filename for i in CONSTANTS.FILENAME_PROHIBITED_CHARS):
+        raise SyntaxError
     return filename
 
 
-def gen_unique_filename(file_path: str | Path) -> Path:
+def ensure_unique_filename(file_path: str | Path) -> Path:
     """
     Generates a unique filename by adding a numerical suffix if the file already exists.
 
@@ -142,13 +125,11 @@ def gen_unique_filename(file_path: str | Path) -> Path:
     :return: A unique Path object with a modified name if necessary.
     """
     file_path = Path(file_path)
-    folder, stem, suffix = file_path.parent, file_path.stem, file_path.suffix
-
-    new_path = file_path
+    parent, stem, suffix = file_path.parent, file_path.stem, file_path.suffix
     counter = 1
 
-    while new_path.exists():
-        new_path = folder / f"{stem} ({counter}){suffix}"
+    while file_path.exists():
+        file_path = parent / f"{stem} ({counter}){suffix}"
         counter += 1
 
-    return new_path
+    return file_path

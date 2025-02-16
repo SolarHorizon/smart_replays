@@ -19,12 +19,12 @@ from .tech import get_time_since_last_input, get_active_window_pid, get_executab
 
 import obspython as obs
 from threading import Thread
-from pathlib import Path
+from contextlib import suppress
 
 
 def restart_replay_buffering_callback():
     """
-    Restarts replay buffering and adds itself to obs time.
+    Restarts replay buffering and adds itself to obs timer.
 
     This callback is only called by the obs timer.
     """
@@ -52,32 +52,17 @@ def append_clip_exe_history():
     """
     Adds current active executable path in clip exe history.
     """
-    pid = get_active_window_pid()
-    try:
+    with suppress(Exception):
+        pid = get_active_window_pid()
         exe = get_executable_path(pid)
-    except:
-        return
-
-    if VARIABLES.clip_exe_history is not None:
-        VARIABLES.clip_exe_history.appendleft(Path(exe))
-        # _print(f"{exe} added to exe history.")
+        VARIABLES.clip_exe_history.appendleft(exe)
 
 
 def append_video_exe_history():
     """
     Adds current active executable path in video exe history.
     """
-    pid = get_active_window_pid()
-    try:
+    with suppress(Exception):
+        pid = get_active_window_pid()
         exe = get_executable_path(pid)
-    except:
-        return
-
-    if VARIABLES.video_exe_history is None:
-        return
-
-    path = Path(exe)
-    if path not in VARIABLES.video_exe_history:
-        VARIABLES.video_exe_history[path] = 1
-    else:
-        VARIABLES.video_exe_history[path] += 1
+        VARIABLES.video_exe_history[exe] += 1

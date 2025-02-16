@@ -12,10 +12,11 @@
 #  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 #  GNU Affero General Public License for more details.
 
-from .globals import VARIABLES, PN, CONSTANTS, ConfigTypes
+from .globals import PN, CONSTANTS, ConfigTypes
 from .tech import _print
 
 from pathlib import Path
+from typing import Any
 import obspython as obs
 import time
 
@@ -84,15 +85,26 @@ def get_current_scene_name() -> str:
     return name
 
 
-def get_base_path(from_obs_config: bool = False) -> Path:
+def get_replay_buffer_max_time() -> int:
     """
-    Returns current base path for clips.
+    Returns replay buffer max time from OBS config (in seconds).
+    """
+    config_mode = get_obs_config("Output", "Mode")
+    if config_mode == "Simple":
+        return get_obs_config("SimpleOutput", "RecRBTime", int)
+    else:
+        return get_obs_config("AdvOut", "RecRBTime", int)
 
-    :param from_obs_config: If True, returns base path from OBS config, otherwise - from script config.
-        It's True only on script launch and only if there is no value in script config.
+
+def get_base_path(script_settings: Any | None = None) -> Path:
     """
-    if not from_obs_config:
-        script_path = obs.obs_data_get_string(VARIABLES.script_settings, PN.PROP_CLIPS_BASE_PATH)
+    Returns the base path for clips, either from the script settings or OBS config.
+
+    :param script_settings: Script config. If not provided, base path returns from OBS config.
+    :return: The base path as a `Path` object.
+    """
+    if script_settings is not None:
+        script_path = obs.obs_data_get_string(script_settings, PN.PROP_CLIPS_BASE_PATH)
         # If PN.PROP_CLIPS_BASE_PATH is not saved in the script config, then it has a default value,
         # which is the value from the OBS config.
         if script_path:
@@ -103,17 +115,6 @@ def get_base_path(from_obs_config: bool = False) -> Path:
         return Path(get_obs_config("SimpleOutput", "FilePath"))
     else:
         return Path(get_obs_config("AdvOut", "RecFilePath"))
-
-
-def get_replay_buffer_max_time() -> int:
-    """
-    Returns replay buffer max time from OBS config (in seconds).
-    """
-    config_mode = get_obs_config("Output", "Mode")
-    if config_mode == "Simple":
-        return get_obs_config("SimpleOutput", "RecRBTime", int)
-    else:
-        return get_obs_config("AdvOut", "RecRBTime", int)
 
 
 def restart_replay_buffering():

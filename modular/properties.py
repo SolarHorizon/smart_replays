@@ -19,7 +19,8 @@ from .properties_callbacks import (open_github_callback,
                                    export_custom_names_to_json_callback,
                                    check_base_path_callback,
                                    check_filename_template_callback,
-                                   update_custom_names_callback)
+                                   update_custom_names_callback,
+                                   update_links_path_prop_visibility)
 from .obs_related import get_base_path
 
 import obspython as obs
@@ -101,8 +102,9 @@ def setup_clip_paths_settings(group_obj):
         description="Base path for clips",
         type=obs.OBS_PATH_DIRECTORY,
         filter=None,
-        default_path=str(get_base_path(from_obs_config=True))
+        default_path=str(get_base_path())
     )
+
     t = obs.obs_properties_add_text(
         props=group_obj,
         name=PN.TXT_CLIPS_BASE_PATH_WARNING,
@@ -111,6 +113,7 @@ def setup_clip_paths_settings(group_obj):
                     "Otherwise, the script will not be able to move the clip to the correct folder.",
         type=obs.OBS_TEXT_INFO
     )
+
     obs.obs_property_text_set_info_type(t, obs.OBS_TEXT_INFO_WARNING)
 
     # ----- Clip naming mode -----
@@ -124,17 +127,17 @@ def setup_clip_paths_settings(group_obj):
     obs.obs_property_list_add_int(
         p=clip_naming_mode_prop,
         name="the name of an active app (.exe file name) at the moment of clip saving;",
-        val=ClipNamingModes.CURRENT_PROCESS.value()
+        val=ClipNamingModes.CURRENT_PROCESS.value
     )
     obs.obs_property_list_add_int(
         p=clip_naming_mode_prop,
         name="the name of an app (.exe file name) that was active most of the time during the clip recording;",
-        val=ClipNamingModes.MOST_RECORDED_PROCESS.value()
+        val=ClipNamingModes.MOST_RECORDED_PROCESS.value
     )
     obs.obs_property_list_add_int(
         p=clip_naming_mode_prop,
         name="the name of the current scene;",
-        val=ClipNamingModes.CURRENT_SCENE.value()
+        val=ClipNamingModes.CURRENT_SCENE.value
     )
 
     t = obs.obs_properties_add_text(
@@ -171,9 +174,30 @@ def setup_clip_paths_settings(group_obj):
         description="Sort clips into folders by application or scene",
     )
 
+    # ----- Create links -----
+    create_links_prop = obs.obs_properties_add_bool(
+        props=group_obj,
+        name=PN.PROP_CLIPS_CREATE_LINKS,
+        description="Create hard links for clips",
+    )
+
+    links_path_prop = obs.obs_properties_add_path(
+        props=group_obj,
+        name=PN.PROP_CLIPS_LINKS_FOLDER_PATH,
+        description="Links folder",
+        type=obs.OBS_PATH_DIRECTORY,
+        filter=None,
+        default_path=str(get_base_path())
+    )
+
+    obs.obs_property_set_visible(links_path_prop,
+                                 obs.obs_data_get_bool(VARIABLES.script_settings,
+                                                       PN.PROP_CLIPS_CREATE_LINKS))
+
     # ----- Callbacks -----
     obs.obs_property_set_modified_callback(base_path_prop, check_base_path_callback)
     obs.obs_property_set_modified_callback(filename_format_prop, check_filename_template_callback)
+    obs.obs_property_set_modified_callback(create_links_prop, update_links_path_prop_visibility)
 
 
 def setup_video_paths_settings(group_obj):
@@ -293,6 +317,35 @@ def setup_popup_notification_settings(group_obj):
         props=group_obj,
         name=PN.PROP_POPUP_CLIPS_ON_FAILURE,
         description="On failure"
+    )
+
+    popup_path_type = obs.obs_properties_add_list(
+        props=group_obj,
+        name=PN.PROP_POPUP_PATH_DISPLAY_MODE,
+        description="Show",
+        type=obs.OBS_COMBO_TYPE_RADIO,
+        format=obs.OBS_COMBO_FORMAT_INT
+    )
+    obs.obs_property_list_add_int(
+        p=popup_path_type,
+        name="full path",
+        val=PopupPathDisplayModes.FULL_PATH.value
+    )
+    obs.obs_property_list_add_int(
+        p=popup_path_type,
+        name="folder and file name",
+        val=PopupPathDisplayModes.FOLDER_AND_FILE.value
+    )
+    obs.obs_property_list_add_int(
+        p=popup_path_type,
+        name="just folder",
+        val=PopupPathDisplayModes.JUST_FOLDER.value
+    )
+
+    obs.obs_property_list_add_int(
+        p=popup_path_type,
+        name="just file name",
+        val=PopupPathDisplayModes.JUST_FILE.value
     )
 
 
@@ -424,12 +477,6 @@ To disable scheduled restarts, set the value to 0.""",
 
 def script_properties():
     p = obs.obs_properties_create()  # main properties object
-    clip_path_gr = obs.obs_properties_create()
-    video_path_gr = obs.obs_properties_create()
-    notification_gr = obs.obs_properties_create()
-    popup_gr = obs.obs_properties_create()
-    custom_names_gr = obs.obs_properties_create()
-    other_gr = obs.obs_properties_create()
 
     # ----- Ungrouped properties -----
     # Updates text
@@ -445,8 +492,15 @@ def script_properties():
     )
 
     # ----- Groups -----
-    obs.obs_properties_add_group(p, PN.GR_CLIPS_PATHS, "Clip path settings", obs.OBS_PROPERTY_GROUP, clip_path_gr)
-    obs.obs_properties_add_group(p, PN.GR_VIDEO_PATHS, "Video path settings", obs.OBS_PROPERTY_GROUP, video_path_gr)
+    clip_path_gr = obs.obs_properties_create()
+    # video_path_gr = obs.obs_properties_create()  # todo: for future updates
+    notification_gr = obs.obs_properties_create()
+    popup_gr = obs.obs_properties_create()
+    custom_names_gr = obs.obs_properties_create()
+    other_gr = obs.obs_properties_create()
+
+    obs.obs_properties_add_group(p, PN.GR_CLIPS_PATH_SETTINGS, "Clip path settings", obs.OBS_GROUP_NORMAL, clip_path_gr)
+    # obs.obs_properties_add_group(p, PN.GR_VIDEOS_PATH_SETTINGS, "Video path settings", obs.OBS_GROUP_NORMAL, video_path_gr)   # todo: for future updates
     obs.obs_properties_add_group(p, PN.GR_SOUND_NOTIFICATION_SETTINGS, "Sound notifications", obs.OBS_GROUP_CHECKABLE, notification_gr)
     obs.obs_properties_add_group(p, PN.GR_POPUP_NOTIFICATION_SETTINGS, "Popup notifications", obs.OBS_GROUP_CHECKABLE, popup_gr)
     obs.obs_properties_add_group(p, PN.GR_CUSTOM_NAMES_SETTINGS, "Custom names", obs.OBS_GROUP_NORMAL, custom_names_gr)
@@ -454,7 +508,7 @@ def script_properties():
 
     # ------ Setup properties ------
     setup_clip_paths_settings(clip_path_gr)
-    setup_video_paths_settings(video_path_gr)
+    # setup_video_paths_settings(video_path_gr)   # todo: for future updates
     setup_notifications_settings(notification_gr)
     setup_popup_notification_settings(popup_gr)
     setup_custom_names_settings(custom_names_gr)

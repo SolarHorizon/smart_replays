@@ -12,10 +12,10 @@
 #  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 #  GNU Affero General Public License for more details.
 
-from .globals import VARIABLES, CLIPS_FORCE_MODE_LOCK, PN
+from .globals import VARIABLES, CONSTANTS, PN, ClipNamingModes
 from .obs_related import get_last_replay_file_name, get_base_path
-from .clipname_gen import gen_clip_base_name, format_filename, add_duplicate_suffix
-from .tech import _print
+from .clipname_gen import gen_clip_base_name, gen_filename, ensure_unique_filename
+from .tech import _print, create_hard_link
 
 from datetime import datetime
 from pathlib import Path
@@ -23,31 +23,35 @@ import obspython as obs
 import os
 
 
-def save_buffer(mode: int = 0) -> tuple[str, Path]:
-    dt = datetime.now()
-
+def move_clip_file(mode: ClipNamingModes | None = None) -> tuple[str, Path]:
     old_file_path = get_last_replay_file_name()
     _print(f"Old clip file path: {old_file_path}")
 
     clip_name = gen_clip_base_name(mode)
     ext = old_file_path.split(".")[-1]
-    filename = format_filename(clip_name, dt) + f".{ext}"
+    filename_template = obs.obs_data_get_string(VARIABLES.script_settings,
+                                                PN.PROP_CLIPS_FILENAME_FORMAT)
+    filename = gen_filename(clip_name, filename_template) + f".{ext}"
 
-    new_folder = Path(get_base_path())
+    new_folder = Path(get_base_path(script_settings=VARIABLES.script_settings))
     if obs.obs_data_get_bool(VARIABLES.script_settings, PN.PROP_CLIPS_SAVE_TO_FOLDER):
-        new_folder = new_folder.joinpath(clip_name)
+        new_folder = new_folder / clip_name
 
     os.makedirs(str(new_folder), exist_ok=True)
-    new_path = new_folder.joinpath(filename)
-    new_path = add_duplicate_suffix(new_path)
+    new_path = new_folder / filename
+    new_path = ensure_unique_filename(new_path)
     _print(f"New clip file path: {new_path}")
 
     os.rename(old_file_path, str(new_path))
     _print("Clip file successfully moved.")
+
+    if obs.obs_data_get_bool(VARIABLES.script_settings, PN.PROP_CLIPS_CREATE_LINKS):
+        links_folder = obs.obs_data_get_string(VARIABLES.script_settings, PN.PROP_CLIPS_LINKS_FOLDER_PATH)
+        create_hard_link(new_path, links_folder)
     return clip_name, new_path
 
 
-def save_buffer_with_force_mode(mode: int):
+def save_buffer_with_force_mode(mode: ClipNamingModes):
     """
     Sends a request to save the replay buffer and setting a specific clip naming mode.
     Can only be called using hotkeys.
@@ -55,9 +59,9 @@ def save_buffer_with_force_mode(mode: int):
     if not obs.obs_frontend_replay_buffer_active():
         return
 
-    if CLIPS_FORCE_MODE_LOCK.locked():
+    if CONSTANTS.CLIPS_FORCE_MODE_LOCK.locked():
         return
 
-    CLIPS_FORCE_MODE_LOCK.acquire()
+    CONSTANTS.CLIPS_FORCE_MODE_LOCK.acquire()
     VARIABLES.force_mode = mode
     obs.obs_frontend_replay_buffer_save()

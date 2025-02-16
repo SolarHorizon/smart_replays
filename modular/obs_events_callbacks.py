@@ -12,20 +12,20 @@
 #  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 #  GNU Affero General Public License for more details.
 
-from .globals import VARIABLES, PN, CLIPS_FORCE_MODE_LOCK
+from .globals import VARIABLES, PN, CONSTANTS, PopupPathDisplayModes
 from .tech import _print
 from .obs_related import get_replay_buffer_max_time, restart_replay_buffering
 from .script_helpers import notify
 from .other_callbacks import restart_replay_buffering_callback, append_clip_exe_history, append_video_exe_history
-from .save_buffer import save_buffer
+from .save_buffer import move_clip_file
+from pathlib import Path
 
 import obspython as obs
-from collections import deque
+from collections import deque, defaultdict
 from threading import Thread
 import traceback
 
 
-# noinspection PyUnresolvedReferences
 def on_buffer_recording_started_callback(event):
     """
     Resets and starts recording executables history.
@@ -35,8 +35,7 @@ def on_buffer_recording_started_callback(event):
         return
 
     # Reset and restart exe history
-    replay_max_size = get_replay_buffer_max_time()
-    VARIABLES.clip_exe_history = deque([], maxlen=replay_max_size)
+    VARIABLES.clip_exe_history = deque([], maxlen=get_replay_buffer_max_time())
     _print(f"Exe history deque created. Maxlen={VARIABLES.clip_exe_history.maxlen}.")
     obs.timer_add(append_clip_exe_history, 1000)
 
@@ -62,9 +61,14 @@ def on_buffer_save_callback(event):
     if event is not obs.OBS_FRONTEND_EVENT_REPLAY_BUFFER_SAVED:
         return
 
-    _print("------ SAVING BUFFER HANDLER ------")
+    path_display_type = obs.obs_data_get_int(VARIABLES.script_settings,
+                                             PN.PROP_POPUP_PATH_DISPLAY_MODE)
+    path_display_type = PopupPathDisplayModes(path_display_type)
+
+    _print(f"{'SAVING BUFFER':->50}")
+
     try:
-        clip_name, path = save_buffer(mode=VARIABLES.force_mode)
+        clip_name, path = move_clip_file(mode=VARIABLES.force_mode)
         if obs.obs_data_get_bool(VARIABLES.script_settings, PN.PROP_RESTART_BUFFER):
             # IMPORTANT
             # I don't know why, but it seems like stopping and starting replay buffering should be in the separate thread.
@@ -72,37 +76,34 @@ def on_buffer_save_callback(event):
             Thread(target=restart_replay_buffering, daemon=True).start()
 
         if VARIABLES.force_mode:
-            VARIABLES.force_mode = 0
-            CLIPS_FORCE_MODE_LOCK.release()
-        notify(True, str(path))
+            VARIABLES.force_mode = None
+            CONSTANTS.CLIPS_FORCE_MODE_LOCK.release()
+
+        notify(True, path, path_display_mode=path_display_type)
     except:
         _print("An error occurred while moving file to the new destination.")
         _print(traceback.format_exc())
-        notify(False, "")
-    _print("-----------------------------------")
+        notify(False, Path(), path_display_mode=path_display_type)
+    _print("-" * 50)
 
 
-def on_video_recording_started_callback(event):
+def on_video_recording_started_callback(event):  # todo: for future updates
     if event is not obs.OBS_FRONTEND_EVENT_RECORDING_STARTED:
         return
 
-    VARIABLES.video_exe_history = {}
+    VARIABLES.video_exe_history = defaultdict(int)
     obs.timer_add(append_video_exe_history, 1000)
 
 
-def on_video_recording_stopping_callback(event):
+def on_video_recording_stopping_callback(event):  # todo: for future updates
     if event is not obs.OBS_FRONTEND_EVENT_RECORDING_STOPPING:
         return
 
     obs.timer_remove(append_video_exe_history)
 
 
-def on_video_recording_stopped_callback(event):
+def on_video_recording_stopped_callback(event):  # todo: for future updates
     if event is not obs.OBS_FRONTEND_EVENT_RECORDING_STOPPED:
         return
 
-    # todo: save video into new location
-
     VARIABLES.video_exe_history = None
-
-    _print(obs.obs_frontend_get_last_recording())

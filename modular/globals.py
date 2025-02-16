@@ -17,7 +17,7 @@ from enum import Enum
 import ctypes
 from threading import Lock
 from pathlib import Path
-from collections import deque
+from collections import deque, defaultdict
 import obspython as obs
 import re
 
@@ -43,37 +43,37 @@ class CONSTANTS:
 class VARIABLES:
     update_available: bool = False
     clip_exe_history: deque[Path, ...] | None = None
-    video_exe_history: dict[Path, int] | None = None  # {Path(path/to/executable): active_seconds_amount
+    video_exe_history: defaultdict[Path, int] | None = None  # {Path(path/to/executable): active_seconds_amount
     exe_path_on_video_stopping_event: Path | None = None
     custom_names: dict[Path, str] = {}
     script_settings = None
     hotkey_ids: dict = {}
-    force_mode = 0
+    force_mode = None
 
 
 class ConfigTypes(Enum):
-    PROFILE = 1
-    APP = 2
-    USER = 3
+    PROFILE = 0
+    APP = 1
+    USER = 2
 
 
 class ClipNamingModes(Enum):
-    CURRENT_PROCESS = 1
-    MOST_RECORDED_PROCESS = 2
-    CURRENT_SCENE = 3
+    CURRENT_PROCESS = 0
+    MOST_RECORDED_PROCESS = 1
+    CURRENT_SCENE = 2
 
 
 class VideoNamingModes(Enum):
-    CURRENT_PROCESS = 1
-    MOST_RECORDED_PROCESS = 2
-    CURRENT_SCENE = 3
+    CURRENT_PROCESS = 0
+    MOST_RECORDED_PROCESS = 1
+    CURRENT_SCENE = 2
 
 
 class PopupPathDisplayModes(Enum):
-    FULL_PATH = 1
-    FOLDER_AND_FILE = 2
-    JUST_FOLDER = 3
-    JUST_FILE = 4
+    FULL_PATH = 0
+    FOLDER_AND_FILE = 1
+    JUST_FOLDER = 2
+    JUST_FILE = 3
 
 
 class PropertiesNames:
@@ -94,6 +94,8 @@ class PropertiesNames:
     TXT_CLIPS_FILENAME_FORMAT_ERR = "2"
     PROP_CLIPS_SAVE_TO_FOLDER = "clips_save_to_folder"
     PROP_CLIPS_ONLY_FORCE_MODE = "clips_only_force_mode"
+    PROP_CLIPS_CREATE_LINKS = "clips_create_links"
+    PROP_CLIPS_LINKS_FOLDER_PATH = "clips_links_folder_path"
 
     # Videos path settings
     PROP_VIDEOS_NAMING_MODE = "videos_naming_mode"
@@ -118,7 +120,7 @@ class PropertiesNames:
     PROP_POPUP_CLIPS_ON_FAILURE = "popup_clips_on_failure"
     PROP_POPUP_VIDEOS_ON_SUCCESS = "popup_videos_on_success"
     PROP_POPUP_VIDEOS_ON_FAILURE = "popup_videos_on_failure"
-    PROP_POPUP_SHOW_PATH_TYPE = "prop_popup_show_path_type"
+    PROP_POPUP_PATH_DISPLAY_MODE = "prop_popup_path_display_mode"
 
     # Custom names settings
     PROP_CUSTOM_NAMES_LIST = "custom_names_list"

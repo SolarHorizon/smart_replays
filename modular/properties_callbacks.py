@@ -12,12 +12,9 @@
 #  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 #  GNU Affero General Public License for more details.
 
-from .exceptions import (CustomNameInvalidCharacters,
-                         CustomNameInvalidFormat,
-                         CustomNamePathAlreadyExists,
-                         CustomNameParsingError)
-from .globals import VARIABLES, PN, DEFAULT_CUSTOM_NAMES
-from .clipname_gen import format_filename
+from .exceptions import *
+from .globals import VARIABLES, CONSTANTS, PN
+from .clipname_gen import gen_filename
 from .obs_related import get_base_path
 from .script_helpers import load_custom_names
 
@@ -97,13 +94,20 @@ def check_filename_template_callback(p, prop, data):
     If template is invalid, shows warning.
     """
     error_text = obs.obs_properties_get(p, PN.TXT_CLIPS_FILENAME_FORMAT_ERR)
-    dt = datetime.now()
 
     try:
-        format_filename("clipname", dt, raise_exception=True)
+        gen_filename("clipname", obs.obs_data_get_string(data, PN.PROP_CLIPS_FILENAME_FORMAT))
         obs.obs_property_set_visible(error_text, False)
     except:
         obs.obs_property_set_visible(error_text, True)
+    return True
+
+
+def update_links_path_prop_visibility(p, prop, data):
+    path_prop = obs.obs_properties_get(p, PN.PROP_CLIPS_LINKS_FOLDER_PATH)
+    prop_name = obs.obs_property_name(prop)
+    obs.obs_property_set_visible(path_prop,
+                                 obs.obs_data_get_bool(data, prop_name))
     return True
 
 
@@ -130,7 +134,7 @@ def check_base_path_callback(p, prop, data):
     """
     warn_text = obs.obs_properties_get(p, PN.TXT_CLIPS_BASE_PATH_WARNING)
 
-    obs_records_path = Path(get_base_path(from_obs_config=True))
+    obs_records_path = Path(get_base_path(data))
     curr_path = Path(obs.obs_data_get_string(data, PN.PROP_CLIPS_BASE_PATH))
 
     if not len(curr_path.parts) or obs_records_path.parts[0] == curr_path.parts[0]:
@@ -175,7 +179,7 @@ def export_custom_names_to_json_callback(*args):
         return False
 
     custom_names_dict = json.loads(obs.obs_data_get_last_json(VARIABLES.script_settings))
-    custom_names_dict = custom_names_dict.get(PN.PROP_CUSTOM_NAMES_LIST) or DEFAULT_CUSTOM_NAMES
+    custom_names_dict = custom_names_dict.get(PN.PROP_CUSTOM_NAMES_LIST) or CONSTANTS.DEFAULT_CUSTOM_NAMES
 
     with open(os.path.join(path, "obs_smart_replays_custom_names.json"), "w") as f:
         f.write(json.dumps(custom_names_dict, ensure_ascii=False))

@@ -19,7 +19,8 @@ from ctypes import wintypes
 import winsound
 from pathlib import Path
 from datetime import datetime
-
+from contextlib import suppress
+import os
 
 class LASTINPUTINFO(ctypes.Structure):
     _fields_ = [("cbSize", wintypes.UINT),
@@ -27,10 +28,8 @@ class LASTINPUTINFO(ctypes.Structure):
 
 
 def _print(*values, sep: str | None = None, end: str | None = None, file=None, flush: bool = False):
-    time_ = datetime.now()
-    str_time = time_.strftime(f"%d.%m.%Y %H:%M:%S")
-    prefix = f"[{str_time}]"
-    print(prefix, *values, sep=sep, end=end, file=file, flush=flush)
+    str_time = datetime.now().strftime(f"%d.%m.%Y %H:%M:%S")
+    print(f"[{str_time}]", *values, sep=sep, end=end, file=file, flush=flush)
 
 
 def get_active_window_pid() -> int | None:
@@ -71,10 +70,8 @@ def play_sound(path: str | Path):
 
     :param path: path to sound (.wav)
     """
-    try:
+    with suppress(Exception):
         winsound.PlaySound(str(path), winsound.SND_ASYNC)
-    except:
-        pass
 
 
 def get_time_since_last_input() -> int:
@@ -88,5 +85,17 @@ def get_time_since_last_input() -> int:
         current_time = ctypes.windll.kernel32.GetTickCount()
         idle_time_ms = current_time - last_input_info.dwTime
         return idle_time_ms // 1000
-    else:
-        return 0
+    return 0
+
+
+def create_hard_link(file_path: Path | str, links_folder: Path | str) -> None:
+    """
+    Creates a hard link for `file_path`.
+
+    :param file_path: Original file path.
+    :param links_folder: Folder where the link will be created.
+    """
+    link_path = Path(links_folder) / Path(file_path).name
+
+    os.makedirs(str(links_folder), exist_ok=True)
+    os.link(str(file_path), link_path)
