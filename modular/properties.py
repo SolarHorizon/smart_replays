@@ -20,7 +20,8 @@ from .properties_callbacks import (open_github_callback,
                                    check_base_path_callback,
                                    check_filename_template_callback,
                                    update_custom_names_callback,
-                                   update_links_path_prop_visibility)
+                                   update_links_path_prop_visibility,
+                                   check_clips_links_folder_path_callback)
 from .obs_related import get_base_path
 
 import obspython as obs
@@ -151,7 +152,7 @@ def setup_clip_paths_settings(group_obj):
     # ----- Clip file name format -----
     filename_format_prop = obs.obs_properties_add_text(
         props=group_obj,
-        name=PN.PROP_CLIPS_FILENAME_FORMAT,
+        name=PN.PROP_CLIPS_FILENAME_TEMPLATE,
         description="File name format",
         type=obs.OBS_TEXT_DEFAULT
     )
@@ -161,7 +162,7 @@ def setup_clip_paths_settings(group_obj):
 
     t = obs.obs_properties_add_text(
         props=group_obj,
-        name=PN.TXT_CLIPS_FILENAME_FORMAT_ERR,
+        name=PN.TXT_CLIPS_FILENAME_TEMPLATE_ERR,
         description="<font color=\"red\"><pre> Invalid format!</pre></font>",
         type=obs.OBS_TEXT_INFO
     )
@@ -189,8 +190,20 @@ def setup_clip_paths_settings(group_obj):
         filter=None,
         default_path=str(get_base_path())
     )
+    links_path_warn = obs.obs_properties_add_text(
+        props=group_obj,
+        name=PN.TXT_CLIPS_LINKS_FOLDER_PATH_WARNING,
+        description="The path must be on the same disk as the path for OBS records "
+                    "(File -> Settings -> Output -> Recording -> Recording Path).\n"
+                    "Otherwise, the script will not be able to create link to the file.",
+        type=obs.OBS_TEXT_INFO
+    )
+    obs.obs_property_text_set_info_type(links_path_warn, obs.OBS_TEXT_INFO_WARNING)
 
     obs.obs_property_set_visible(links_path_prop,
+                                 obs.obs_data_get_bool(VARIABLES.script_settings,
+                                                       PN.PROP_CLIPS_CREATE_LINKS))
+    obs.obs_property_set_visible(links_path_warn,
                                  obs.obs_data_get_bool(VARIABLES.script_settings,
                                                        PN.PROP_CLIPS_CREATE_LINKS))
 
@@ -198,6 +211,7 @@ def setup_clip_paths_settings(group_obj):
     obs.obs_property_set_modified_callback(base_path_prop, check_base_path_callback)
     obs.obs_property_set_modified_callback(filename_format_prop, check_filename_template_callback)
     obs.obs_property_set_modified_callback(create_links_prop, update_links_path_prop_visibility)
+    obs.obs_property_set_modified_callback(links_path_prop, check_clips_links_folder_path_callback)
 
 
 def setup_video_paths_settings(group_obj):
@@ -503,7 +517,7 @@ def script_properties():
     # obs.obs_properties_add_group(p, PN.GR_VIDEOS_PATH_SETTINGS, "Video path settings", obs.OBS_GROUP_NORMAL, video_path_gr)   # todo: for future updates
     obs.obs_properties_add_group(p, PN.GR_SOUND_NOTIFICATION_SETTINGS, "Sound notifications", obs.OBS_GROUP_CHECKABLE, notification_gr)
     obs.obs_properties_add_group(p, PN.GR_POPUP_NOTIFICATION_SETTINGS, "Popup notifications", obs.OBS_GROUP_CHECKABLE, popup_gr)
-    obs.obs_properties_add_group(p, PN.GR_CUSTOM_NAMES_SETTINGS, "Custom names", obs.OBS_GROUP_NORMAL, custom_names_gr)
+    obs.obs_properties_add_group(p, PN.GR_EXE_ALIASES_SETTINGS, "Custom names", obs.OBS_GROUP_NORMAL, custom_names_gr)
     obs.obs_properties_add_group(p, PN.GR_OTHER_SETTINGS, "Other", obs.OBS_GROUP_NORMAL, other_gr)
 
     # ------ Setup properties ------

@@ -25,7 +25,7 @@ user32 = ctypes.windll.user32
 
 
 class CONSTANTS:
-    VERSION = "1.0.7"
+    VERSION = "1.0.8"
     OBS_VERSION_STRING = obs.obs_get_version_string()
     OBS_VERSION_RE = re.compile(r'(\d+)\.(\d+)\.(\d+)')
     OBS_VERSION = [int(i) for i in OBS_VERSION_RE.match(OBS_VERSION_STRING).groups()]
@@ -82,20 +82,22 @@ class PropertiesNames:
     GR_VIDEOS_PATH_SETTINGS = "videos_path_settings"
     GR_SOUND_NOTIFICATION_SETTINGS = "sound_notification_settings"
     GR_POPUP_NOTIFICATION_SETTINGS = "popup_notification_settings"
-    GR_CUSTOM_NAMES_SETTINGS = "custom_names_settings"
+    GR_EXE_ALIASES_SETTINGS = "exe_aliases_settings"
     GR_OTHER_SETTINGS = "other_settings"
 
     # Clips path settings
     PROP_CLIPS_BASE_PATH = "clips_base_path"
-    TXT_CLIPS_BASE_PATH_WARNING = "0"
+    TXT_CLIPS_BASE_PATH_WARNING = "clips_base_path_warning"
     PROP_CLIPS_NAMING_MODE = "clips_naming_mode"
-    TXT_CLIPS_HOTKEY_TIP = "1"
-    PROP_CLIPS_FILENAME_FORMAT = "clips_filename_format"
-    TXT_CLIPS_FILENAME_FORMAT_ERR = "2"
+    TXT_CLIPS_HOTKEY_TIP = "clips_hotkey_tip"
+    PROP_CLIPS_FILENAME_TEMPLATE = "clips_filename_template"
+    TXT_CLIPS_FILENAME_TEMPLATE_ERR = "clips_filename_template_err"
     PROP_CLIPS_SAVE_TO_FOLDER = "clips_save_to_folder"
-    PROP_CLIPS_ONLY_FORCE_MODE = "clips_only_force_mode"
+    PROP_CLIPS_ONLY_FORCE_MODE = "clips_only_force_mode" # todo
     PROP_CLIPS_CREATE_LINKS = "clips_create_links"
     PROP_CLIPS_LINKS_FOLDER_PATH = "clips_links_folder_path"
+    TXT_CLIPS_LINKS_FOLDER_PATH_WARNING = "clips_links_folder_path_warning"
+
 
     # Videos path settings
     PROP_VIDEOS_NAMING_MODE = "videos_naming_mode"

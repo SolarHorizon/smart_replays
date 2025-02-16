@@ -17,7 +17,6 @@ from .obs_related import get_last_replay_file_name, get_base_path
 from .clipname_gen import gen_clip_base_name, gen_filename, ensure_unique_filename
 from .tech import _print, create_hard_link
 
-from datetime import datetime
 from pathlib import Path
 import obspython as obs
 import os
@@ -30,7 +29,7 @@ def move_clip_file(mode: ClipNamingModes | None = None) -> tuple[str, Path]:
     clip_name = gen_clip_base_name(mode)
     ext = old_file_path.split(".")[-1]
     filename_template = obs.obs_data_get_string(VARIABLES.script_settings,
-                                                PN.PROP_CLIPS_FILENAME_FORMAT)
+                                                PN.PROP_CLIPS_FILENAME_TEMPLATE)
     filename = gen_filename(clip_name, filename_template) + f".{ext}"
 
     new_folder = Path(get_base_path(script_settings=VARIABLES.script_settings))

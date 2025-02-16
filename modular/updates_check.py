@@ -19,7 +19,7 @@ import json
 import traceback
 
 
-def get_latest_release_tag() -> dict | None:
+def get_latest_release_tag() -> dict | None:  # todo: for future updates
     url = "https://api.github.com/repos/qvvonk/smart_replays/releases/latest"
 
     try:
@@ -33,7 +33,7 @@ def get_latest_release_tag() -> dict | None:
     return None
 
 
-def check_updates(current_version: str):
+def check_updates(current_version: str):  # todo: for future updates
     latest_version = get_latest_release_tag()
     _print(latest_version)
     if latest_version and f'v{current_version}' != latest_version:
