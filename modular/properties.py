@@ -15,11 +15,11 @@
 from .globals import VARIABLES, PN, ClipNamingModes, VideoNamingModes, PopupPathDisplayModes
 from .properties_callbacks import (open_github_callback,
                                    update_notifications_menu_callback,
-                                   import_custom_names_from_json_callback,
-                                   export_custom_names_to_json_callback,
+                                   import_aliases_from_json_callback,
+                                   export_aliases_to_json_callback,
                                    check_base_path_callback,
                                    check_filename_template_callback,
-                                   update_custom_names_callback,
+                                   update_aliases_callback,
                                    update_links_path_prop_visibility,
                                    check_clips_links_folder_path_callback)
 from .obs_related import get_base_path
@@ -363,20 +363,20 @@ def setup_popup_notification_settings(group_obj):
     )
 
 
-def setup_custom_names_settings(group_obj):
+def setup_aliases_settings(group_obj):
     obs.obs_properties_add_text(
         props=group_obj,
-        name=PN.TXT_CUSTOM_NAMES_DESC,
-        description="Since the executable name doesn't always match the name of the application/game "
-                    "(e.g. the game is called Deadlock, but the executable is project8.exe), "
-                    "you can set custom names for clips based on the name of the executable / folder "
-                    "where the executable is located.",
+        name=PN.TXT_ALIASES_DESC,
+        description="Executable (.exe) files often have names that don't match the actual game title "
+                    "(e.g., the game is called Deadlock, but the .exe file is named project8.exe)."
+                    "You can create an alias for the executable file or folder. "
+                    "Smart Replays will use this alias for renaming, rather than the .exe file name.",
         type=obs.OBS_TEXT_INFO
     )
 
     err_text_1 = obs.obs_properties_add_text(
         props=group_obj,
-        name=PN.TXT_CUSTOM_NAMES_INVALID_CHARACTERS,
+        name=PN.TXT_ALIASES_INVALID_CHARACTERS,
         description="""
     <div style="font-size: 14px">
     <span style="color: red">Invalid path or clip name value.<br></span>
@@ -389,14 +389,14 @@ def setup_custom_names_settings(group_obj):
 
     err_text_2 = obs.obs_properties_add_text(
         props=group_obj,
-        name=PN.TXT_CUSTOM_NAMES_PATH_EXISTS,
+        name=PN.TXT_ALIASES_PATH_EXISTS,
         description="""<div style="font-size: 14px; color: red">This path has already been added to the list.</div>""",
         type=obs.OBS_TEXT_INFO
     )
 
     err_text_3 = obs.obs_properties_add_text(
         props=group_obj,
-        name=PN.TXT_CUSTOM_NAMES_INVALID_FORMAT,
+        name=PN.TXT_ALIASES_INVALID_FORMAT,
         description="""
     <div style="font-size: 14px">
     <span style="color: red">Invalid format.<br></span>
@@ -410,9 +410,9 @@ def setup_custom_names_settings(group_obj):
     obs.obs_property_set_visible(err_text_2, False)
     obs.obs_property_set_visible(err_text_3, False)
 
-    custom_names_list = obs.obs_properties_add_editable_list(
+    aliases_list = obs.obs_properties_add_editable_list(
         props=group_obj,
-        name=PN.PROP_CUSTOM_NAMES_LIST,
+        name=PN.PROP_ALIASES_LIST,
         description="",
         type=obs.OBS_EDITABLE_LIST_TYPE_STRINGS,
         filter=None,
@@ -430,7 +430,7 @@ def setup_custom_names_settings(group_obj):
 
     obs.obs_properties_add_path(
         props=group_obj,
-        name=PN.PROP_CUSTOM_NAMES_IMPORT_PATH,
+        name=PN.PROP_ALIASES_IMPORT_PATH,
         description="",
         type=obs.OBS_PATH_FILE,
         filter=None,
@@ -439,14 +439,14 @@ def setup_custom_names_settings(group_obj):
 
     obs.obs_properties_add_button(
         group_obj,
-        PN.BTN_CUSTOM_NAMES_IMPORT,
-        "Import custom names",
-        import_custom_names_from_json_callback,
+        PN.BTN_ALIASES_IMPORT,
+        "Import aliases",
+        import_aliases_from_json_callback,
     )
 
     obs.obs_properties_add_path(
         props=group_obj,
-        name=PN.PROP_CUSTOM_NAMES_EXPORT_PATH,
+        name=PN.PROP_ALIASES_EXPORT_PATH,
         description="",
         type=obs.OBS_PATH_DIRECTORY,
         filter=None,
@@ -455,13 +455,13 @@ def setup_custom_names_settings(group_obj):
 
     obs.obs_properties_add_button(
         group_obj,
-        PN.BTN_CUSTOM_NAMES_EXPORT,
-        "Export custom names",
-        export_custom_names_to_json_callback,
+        PN.BTN_ALIASES_EXPORT,
+        "Export aliases",
+        export_aliases_to_json_callback,
     )
 
     # ----- Callbacks -----
-    obs.obs_property_set_modified_callback(custom_names_list, update_custom_names_callback)
+    obs.obs_property_set_modified_callback(aliases_list, update_aliases_callback)
 
 
 def setup_other_settings(group_obj):
@@ -510,14 +510,14 @@ def script_properties():
     # video_path_gr = obs.obs_properties_create()  # todo: for future updates
     notification_gr = obs.obs_properties_create()
     popup_gr = obs.obs_properties_create()
-    custom_names_gr = obs.obs_properties_create()
+    aliases_gr = obs.obs_properties_create()
     other_gr = obs.obs_properties_create()
 
     obs.obs_properties_add_group(p, PN.GR_CLIPS_PATH_SETTINGS, "Clip path settings", obs.OBS_GROUP_NORMAL, clip_path_gr)
     # obs.obs_properties_add_group(p, PN.GR_VIDEOS_PATH_SETTINGS, "Video path settings", obs.OBS_GROUP_NORMAL, video_path_gr)   # todo: for future updates
     obs.obs_properties_add_group(p, PN.GR_SOUND_NOTIFICATION_SETTINGS, "Sound notifications", obs.OBS_GROUP_CHECKABLE, notification_gr)
     obs.obs_properties_add_group(p, PN.GR_POPUP_NOTIFICATION_SETTINGS, "Popup notifications", obs.OBS_GROUP_CHECKABLE, popup_gr)
-    obs.obs_properties_add_group(p, PN.GR_EXE_ALIASES_SETTINGS, "Custom names", obs.OBS_GROUP_NORMAL, custom_names_gr)
+    obs.obs_properties_add_group(p, PN.GR_ALIASES_SETTINGS, "Aliases", obs.OBS_GROUP_NORMAL, aliases_gr)
     obs.obs_properties_add_group(p, PN.GR_OTHER_SETTINGS, "Other", obs.OBS_GROUP_NORMAL, other_gr)
 
     # ------ Setup properties ------
@@ -525,7 +525,7 @@ def script_properties():
     # setup_video_paths_settings(video_path_gr)   # todo: for future updates
     setup_notifications_settings(notification_gr)
     setup_popup_notification_settings(popup_gr)
-    setup_custom_names_settings(custom_names_gr)
+    setup_aliases_settings(aliases_gr)
     setup_other_settings(other_gr)
 
     return p

@@ -14,7 +14,7 @@
 
 from .globals import (VARIABLES, CONSTANTS, PN)
 
-from .exceptions import CustomNameInvalidFormat, CustomNameInvalidCharacters, CustomNamePathAlreadyExists
+from .exceptions import AliasInvalidFormat, AliasInvalidCharacters, AliasPathAlreadyExists
 from .globals import ConfigTypes, PopupPathDisplayModes
 from .obs_related import get_obs_config
 from .tech import play_sound, _print
@@ -56,36 +56,36 @@ def notify(success: bool, clip_path: Path, path_display_mode: PopupPathDisplayMo
             subprocess.Popen([python_exe, __file__, "Clip not saved", f"More in the logs.", "#C00000"])
 
 
-def load_custom_names(script_settings_dict: dict):
+def load_aliases(script_settings_dict: dict):
     """
-    Loads custom names to global custom_name variable.
+    Loads aliases to `VARIABLES.aliases`.
     Raises exception if path or name are invalid.
 
     :param script_settings_dict: Script settings as dict.
     """
-    _print("Loading custom names...")
+    _print("Loading aliases...")
 
-    new_custom_names = {}
-    custom_names_list = script_settings_dict.get(PN.PROP_CUSTOM_NAMES_LIST)
-    if custom_names_list is None:
-        custom_names_list = CONSTANTS.DEFAULT_CUSTOM_NAMES
+    new_aliases = {}
+    aliases_list = script_settings_dict.get(PN.PROP_ALIASES_LIST)
+    if aliases_list is None:
+        aliases_list = CONSTANTS.DEFAULT_ALIASES
 
-    for index, i in enumerate(custom_names_list):
+    for index, i in enumerate(aliases_list):
         value = i.get("value")
         spl = value.split(">", 1)
         try:
             path, name = spl[0].strip(), spl[1].strip()
         except IndexError:
-            raise CustomNameInvalidFormat(index)
+            raise AliasInvalidFormat(index)
 
         path = os.path.expandvars(path)
         if any(i in path for i in CONSTANTS.PATH_PROHIBITED_CHARS) or any(i in name for i in CONSTANTS.FILENAME_PROHIBITED_CHARS):
-            raise CustomNameInvalidCharacters(index)
+            raise AliasInvalidCharacters(index)
 
-        if Path(path) in new_custom_names.keys():
-            raise CustomNamePathAlreadyExists(index)
+        if Path(path) in new_aliases.keys():
+            raise AliasPathAlreadyExists(index)
 
-        new_custom_names[Path(path)] = name
+        new_aliases[Path(path)] = name
 
-    VARIABLES.custom_names = new_custom_names
-    _print(f"{len(VARIABLES.custom_names)} custom names are loaded.")
+    VARIABLES.aliases = new_aliases
+    _print(f"{len(VARIABLES.aliases)} aliases are loaded.")

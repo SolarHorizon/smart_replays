@@ -34,7 +34,7 @@ class CONSTANTS:
     FILENAME_PROHIBITED_CHARS = r'/\:"<>*?|%'
     PATH_PROHIBITED_CHARS = r'"<>*?|%'
     DEFAULT_FILENAME_FORMAT = "%NAME_%d.%m.%Y_%H-%M-%S"
-    DEFAULT_CUSTOM_NAMES = (
+    DEFAULT_ALIASES = (
         {"value": "C:\\Windows\\explorer.exe > Desktop", "selected": False, "hidden": False},
         {"value": f"{sys.executable} > OBS", "selected": False, "hidden": False}
     )
@@ -45,7 +45,7 @@ class VARIABLES:
     clip_exe_history: deque[Path, ...] | None = None
     video_exe_history: defaultdict[Path, int] | None = None  # {Path(path/to/executable): active_seconds_amount
     exe_path_on_video_stopping_event: Path | None = None
-    custom_names: dict[Path, str] = {}
+    aliases: dict[Path, str] = {}
     script_settings = None
     hotkey_ids: dict = {}
     force_mode = None
@@ -82,7 +82,7 @@ class PropertiesNames:
     GR_VIDEOS_PATH_SETTINGS = "videos_path_settings"
     GR_SOUND_NOTIFICATION_SETTINGS = "sound_notification_settings"
     GR_POPUP_NOTIFICATION_SETTINGS = "popup_notification_settings"
-    GR_EXE_ALIASES_SETTINGS = "exe_aliases_settings"
+    GR_ALIASES_SETTINGS = "aliases_settings"
     GR_OTHER_SETTINGS = "other_settings"
 
     # Clips path settings
@@ -98,12 +98,11 @@ class PropertiesNames:
     PROP_CLIPS_LINKS_FOLDER_PATH = "clips_links_folder_path"
     TXT_CLIPS_LINKS_FOLDER_PATH_WARNING = "clips_links_folder_path_warning"
 
-
     # Videos path settings
     PROP_VIDEOS_NAMING_MODE = "videos_naming_mode"
-    TXT_VIDEOS_HOTKEY_TIP = "3"
+    TXT_VIDEOS_HOTKEY_TIP = "videos_hotkey_tip"
     PROP_VIDEOS_FILENAME_FORMAT = "videos_filename_format"
-    TXT_VIDEOS_FILENAME_FORMAT_ERR = "4"
+    TXT_VIDEOS_FILENAME_FORMAT_ERR = "videos_filename_format_err"
     PROP_VIDEOS_SAVE_TO_FOLDER = "videos_save_to_folder"
     PROP_VIDEOS_ONLY_FORCE_MODE = "videos_only_force_mode"
 
@@ -124,25 +123,25 @@ class PropertiesNames:
     PROP_POPUP_VIDEOS_ON_FAILURE = "popup_videos_on_failure"
     PROP_POPUP_PATH_DISPLAY_MODE = "prop_popup_path_display_mode"
 
-    # Custom names settings
-    PROP_CUSTOM_NAMES_LIST = "custom_names_list"
-    TXT_CUSTOM_NAMES_DESC = "5"
+    # Aliases settings
+    PROP_ALIASES_LIST = "aliases_list"
+    TXT_ALIASES_DESC = "aliases_desc"
 
-    # Custom names parsing error texts
-    TXT_CUSTOM_NAMES_PATH_EXISTS = "6"
-    TXT_CUSTOM_NAMES_INVALID_FORMAT = "7"
-    TXT_CUSTOM_NAMES_INVALID_CHARACTERS = "8"
+    # Aliases parsing error texts
+    TXT_ALIASES_PATH_EXISTS = "aliases_path_exists_err"
+    TXT_ALIASES_INVALID_FORMAT = "aliases_invalid_format_err"
+    TXT_ALIASES_INVALID_CHARACTERS = "aliases_invalid_characters_err"
 
-    # Export / Import custom names section
-    PROP_CUSTOM_NAMES_EXPORT_PATH = "custom_names_export_path"
-    BTN_CUSTOM_NAMES_EXPORT = "9"
-    PROP_CUSTOM_NAMES_IMPORT_PATH = "custom_names_import_path"
-    BTN_CUSTOM_NAMES_IMPORT = "10"
+    # Export / Import aliases section
+    PROP_ALIASES_EXPORT_PATH = "aliases_export_path"
+    BTN_ALIASES_EXPORT = "aliases_export_btn"
+    PROP_ALIASES_IMPORT_PATH = "aliases_import_path"
+    BTN_ALIASES_IMPORT = "aliases_import_btn"
 
     # Other section
     PROP_RESTART_BUFFER = "restart_buffer"
     PROP_RESTART_BUFFER_LOOP = "restart_buffer_loop"
-    TXT_RESTART_BUFFER_LOOP = "11"
+    TXT_RESTART_BUFFER_LOOP = "restart_buffer_loop_desc"
 
     # Hotkeys
     HK_SAVE_BUFFER_MODE_1 = "save_buffer_force_mode_1"

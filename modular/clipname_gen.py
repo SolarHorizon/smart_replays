@@ -53,7 +53,7 @@ def gen_clip_base_name(mode: ClipNamingModes | None = None) -> str:
                 executable_path = get_executable_path(get_active_window_pid())
 
         _print(f'Searching for {executable_path} in aliases list...')
-        if alias := get_exe_alias(executable_path, VARIABLES.custom_names):
+        if alias := get_alias(executable_path, VARIABLES.aliases):
             _print(f'Alias found: {alias}.')
             return alias
         else:
@@ -66,16 +66,16 @@ def gen_clip_base_name(mode: ClipNamingModes | None = None) -> str:
         return get_current_scene_name()
 
 
-def get_exe_alias(executable_path: str | Path, aliases_dict: dict[Path, str]) -> str | None:
+def get_alias(executable_path: str | Path, aliases_dict: dict[Path, str]) -> str | None:
     """
-    Retrieves a custom alias for the given executable path from the provided dictionary.
+    Retrieves an alias for the given executable path from the provided dictionary.
 
     The function first checks if the exact `executable_path` exists in `aliases_dict`.
     If not, it searches for the closest parent directory that is present in the dictionary.
 
     :param executable_path: A file path or string representing the executable.
     :param aliases_dict: A dictionary where keys are `Path` objects representing executable file paths
-                         or directories, and values are their corresponding custom aliases.
+                         or directories, and values are their corresponding aliases.
     :return: The corresponding alias if found, otherwise `None`.
     """
     exe_path = Path(executable_path)

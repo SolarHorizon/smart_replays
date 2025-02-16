@@ -12,31 +12,31 @@
 #  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 #  GNU Affero General Public License for more details.
 
-class CustomNameParsingError(Exception):
+class AliasParsingError(Exception):
     """
-    Base exception for all custom names related exceptions.
+    Base exception for all alias related exceptions.
     """
     def __init__(self, index):
         """
-        :param index: custom name index.
+        :param index: alias index.
         """
         super(Exception).__init__()
         self.index = index
 
 
-class CustomNamePathAlreadyExists(CustomNameParsingError):
+class AliasPathAlreadyExists(AliasParsingError):
     """
-    Exception raised when a custom name is already exists.
-    """
-
-
-class CustomNameInvalidCharacters(CustomNameParsingError):
-    """
-    Exception raised when a custom name has invalid characters.
+    Exception raised when an alias is already exists.
     """
 
 
-class CustomNameInvalidFormat(CustomNameParsingError):
+class AliasInvalidCharacters(AliasParsingError):
     """
-    Exception raised when a custom name is invalid format.
+    Exception raised when an alias has invalid characters.
+    """
+
+
+class AliasInvalidFormat(AliasParsingError):
+    """
+    Exception raised when an alias is invalid format.
     """

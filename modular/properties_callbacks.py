@@ -16,7 +16,7 @@ from .exceptions import *
 from .globals import VARIABLES, CONSTANTS, PN
 from .clipname_gen import gen_filename
 from .obs_related import get_base_path
-from .script_helpers import load_custom_names
+from .script_helpers import load_aliases
 
 from datetime import datetime
 from pathlib import Path
@@ -35,56 +35,56 @@ def open_github_callback(*args):
     webbrowser.open("https://github.com/qvvonk/smart_replays", 1)
 
 
-def update_custom_names_callback(p, prop, data):
+def update_aliases_callback(p, prop, data):
     """
-    Checks the list of custom names and updates custom names menu (shows / hides error texts).
+    Checks the list of aliases and updates aliases menu (shows / hides error texts).
     """
-    invalid_format_err_text = obs.obs_properties_get(p, PN.TXT_CUSTOM_NAMES_INVALID_FORMAT)
-    invalid_chars_err_text = obs.obs_properties_get(p, PN.TXT_CUSTOM_NAMES_INVALID_CHARACTERS)
-    path_exists_err_text = obs.obs_properties_get(p, PN.TXT_CUSTOM_NAMES_PATH_EXISTS)
+    invalid_format_err_text = obs.obs_properties_get(p, PN.TXT_ALIASES_INVALID_FORMAT)
+    invalid_chars_err_text = obs.obs_properties_get(p, PN.TXT_ALIASES_INVALID_CHARACTERS)
+    path_exists_err_text = obs.obs_properties_get(p, PN.TXT_ALIASES_PATH_EXISTS)
 
     settings_json: dict = json.loads(obs.obs_data_get_json(data))
     if not settings_json:
         return False
 
     try:
-        load_custom_names(settings_json)
+        load_aliases(settings_json)
         obs.obs_property_set_visible(invalid_format_err_text, False)
         obs.obs_property_set_visible(invalid_chars_err_text, False)
         obs.obs_property_set_visible(path_exists_err_text, False)
         return True
 
-    except CustomNameInvalidCharacters as e:
+    except AliasInvalidCharacters as e:
         obs.obs_property_set_visible(invalid_format_err_text, False)
         obs.obs_property_set_visible(invalid_chars_err_text, True)
         obs.obs_property_set_visible(path_exists_err_text, False)
         index = e.index
 
-    except CustomNameInvalidFormat as e:
+    except AliasInvalidFormat as e:
         obs.obs_property_set_visible(invalid_format_err_text, True)
         obs.obs_property_set_visible(invalid_chars_err_text, False)
         obs.obs_property_set_visible(path_exists_err_text, False)
         index = e.index
 
-    except CustomNamePathAlreadyExists as e:
+    except AliasPathAlreadyExists as e:
         obs.obs_property_set_visible(invalid_format_err_text, False)
         obs.obs_property_set_visible(invalid_chars_err_text, False)
         obs.obs_property_set_visible(path_exists_err_text, True)
         index = e.index
 
-    except CustomNameParsingError as e:
+    except AliasParsingError as e:
         index = e.index
 
     # If error in parsing
-    settings_json[PN.PROP_CUSTOM_NAMES_LIST].pop(index)
-    new_custom_names_array = obs.obs_data_array_create()
+    settings_json[PN.PROP_ALIASES_LIST].pop(index)
+    new_aliases_array = obs.obs_data_array_create()
 
-    for index, custom_name in enumerate(settings_json[PN.PROP_CUSTOM_NAMES_LIST]):
-        custom_name_data = obs.obs_data_create_from_json(json.dumps(custom_name))
-        obs.obs_data_array_insert(new_custom_names_array, index, custom_name_data)
+    for index, alias in enumerate(settings_json[PN.PROP_ALIASES_LIST]):
+        alias_data = obs.obs_data_create_from_json(json.dumps(alias))
+        obs.obs_data_array_insert(new_aliases_array, index, alias_data)
 
-    obs.obs_data_set_array(data, PN.PROP_CUSTOM_NAMES_LIST, new_custom_names_array)
-    obs.obs_data_array_release(new_custom_names_array)
+    obs.obs_data_set_array(data, PN.PROP_ALIASES_LIST, new_aliases_array)
+    obs.obs_data_array_release(new_aliases_array)
     return True
 
 
@@ -168,11 +168,11 @@ def check_base_path_callback(p, prop, data):
     return True
 
 
-def import_custom_names_from_json_callback(*args):
+def import_aliases_from_json_callback(*args):
     """
-    Imports custom names from JSON file.
+    Imports aliases from JSON file.
     """
-    path = obs.obs_data_get_string(VARIABLES.script_settings, PN.PROP_CUSTOM_NAMES_IMPORT_PATH)
+    path = obs.obs_data_get_string(VARIABLES.script_settings, PN.PROP_ALIASES_IMPORT_PATH)
     if not path or not os.path.exists(path) or not os.path.isfile(path):
         return False
 
@@ -189,20 +189,20 @@ def import_custom_names_from_json_callback(*args):
         item = obs.obs_data_create_from_json(json.dumps(i))
         obs.obs_data_array_insert(arr, index, item)
 
-    obs.obs_data_set_array(VARIABLES.script_settings, PN.PROP_CUSTOM_NAMES_LIST, arr)
+    obs.obs_data_set_array(VARIABLES.script_settings, PN.PROP_ALIASES_LIST, arr)
     return True
 
 
-def export_custom_names_to_json_callback(*args):
+def export_aliases_to_json_callback(*args):
     """
-    Exports custom names to JSON file.
+    Exports aliases to JSON file.
     """
-    path = obs.obs_data_get_string(VARIABLES.script_settings, PN.PROP_CUSTOM_NAMES_EXPORT_PATH)
+    path = obs.obs_data_get_string(VARIABLES.script_settings, PN.PROP_ALIASES_EXPORT_PATH)
     if not path or not os.path.exists(path) or not os.path.isdir(path):
         return False
 
-    custom_names_dict = json.loads(obs.obs_data_get_last_json(VARIABLES.script_settings))
-    custom_names_dict = custom_names_dict.get(PN.PROP_CUSTOM_NAMES_LIST) or CONSTANTS.DEFAULT_CUSTOM_NAMES
+    aliases_dict = json.loads(obs.obs_data_get_last_json(VARIABLES.script_settings))
+    aliases_dict = aliases_dict.get(PN.PROP_ALIASES_LIST) or CONSTANTS.DEFAULT_ALIASES
 
-    with open(os.path.join(path, "obs_smart_replays_custom_names.json"), "w") as f:
-        f.write(json.dumps(custom_names_dict, ensure_ascii=False))
+    with open(os.path.join(path, "obs_smart_replays_aliases.json"), "w", encoding="utf-8") as f:
+        f.write(json.dumps(aliases_dict, ensure_ascii=False))

@@ -24,7 +24,7 @@ from .obs_events_callbacks import (on_buffer_save_callback,
                                    on_video_recording_stopping_callback,
                                    on_video_recording_stopped_callback)
 from .updates_check import check_updates
-from .script_helpers import load_custom_names
+from .script_helpers import load_aliases
 from .hotkeys import load_hotkeys
 
 import obspython as obs
@@ -53,11 +53,11 @@ def script_defaults(s):
     obs.obs_data_set_default_bool(s, PN.PROP_RESTART_BUFFER, True)
 
     arr = obs.obs_data_array_create()
-    for index, i in enumerate(CONSTANTS.DEFAULT_CUSTOM_NAMES):
+    for index, i in enumerate(CONSTANTS.DEFAULT_ALIASES):
         data = obs.obs_data_create_from_json(json.dumps(i))
         obs.obs_data_array_insert(arr, index, data)
 
-    obs.obs_data_set_default_array( s, PN.PROP_CUSTOM_NAMES_LIST, arr )
+    obs.obs_data_set_default_array(s, PN.PROP_ALIASES_LIST, arr)
     _print("The default values are set.")
 
 
@@ -84,7 +84,7 @@ def script_load(script_settings):
     # VARIABLES.update_available = check_updates(CONSTANTS.VERSION)  # todo: for future updates
 
     json_settings = json.loads(obs.obs_data_get_json(script_settings))
-    load_custom_names(json_settings)
+    load_aliases(json_settings)
 
     obs.obs_frontend_add_event_callback(on_buffer_save_callback)
     obs.obs_frontend_add_event_callback(on_buffer_recording_started_callback)
