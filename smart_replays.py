@@ -215,7 +215,7 @@ class CONSTANTS:
     FILENAME_PROHIBITED_CHARS = r'/\:"<>*?|%'
     PATH_PROHIBITED_CHARS = r'"<>*?|%'
     DEFAULT_FILENAME_FORMAT = "%NAME_%d.%m.%Y_%H-%M-%S"
-    DEFAULT_CUSTOM_NAMES = (
+    DEFAULT_ALIASES = (
         {"value": "C:\\Windows\\explorer.exe > Desktop", "selected": False, "hidden": False},
         {"value": f"{sys.executable} > OBS", "selected": False, "hidden": False}
     )
@@ -226,7 +226,7 @@ class VARIABLES:
     clip_exe_history: deque[Path, ...] | None = None
     video_exe_history: defaultdict[Path, int] | None = None  # {Path(path/to/executable): active_seconds_amount
     exe_path_on_video_stopping_event: Path | None = None
-    custom_names: dict[Path, str] = {}
+    aliases: dict[Path, str] = {}
     script_settings = None
     hotkey_ids: dict = {}
     force_mode = None
@@ -263,7 +263,7 @@ class PropertiesNames:
     GR_VIDEOS_PATH_SETTINGS = "videos_path_settings"
     GR_SOUND_NOTIFICATION_SETTINGS = "sound_notification_settings"
     GR_POPUP_NOTIFICATION_SETTINGS = "popup_notification_settings"
-    GR_EXE_ALIASES_SETTINGS = "exe_aliases_settings"
+    GR_ALIASES_SETTINGS = "aliases_settings"
     GR_OTHER_SETTINGS = "other_settings"
 
     # Clips path settings
@@ -279,12 +279,11 @@ class PropertiesNames:
     PROP_CLIPS_LINKS_FOLDER_PATH = "clips_links_folder_path"
     TXT_CLIPS_LINKS_FOLDER_PATH_WARNING = "clips_links_folder_path_warning"
 
-
     # Videos path settings
     PROP_VIDEOS_NAMING_MODE = "videos_naming_mode"
-    TXT_VIDEOS_HOTKEY_TIP = "3"
+    TXT_VIDEOS_HOTKEY_TIP = "videos_hotkey_tip"
     PROP_VIDEOS_FILENAME_FORMAT = "videos_filename_format"
-    TXT_VIDEOS_FILENAME_FORMAT_ERR = "4"
+    TXT_VIDEOS_FILENAME_FORMAT_ERR = "videos_filename_format_err"
     PROP_VIDEOS_SAVE_TO_FOLDER = "videos_save_to_folder"
     PROP_VIDEOS_ONLY_FORCE_MODE = "videos_only_force_mode"
 
@@ -305,25 +304,25 @@ class PropertiesNames:
     PROP_POPUP_VIDEOS_ON_FAILURE = "popup_videos_on_failure"
     PROP_POPUP_PATH_DISPLAY_MODE = "prop_popup_path_display_mode"
 
-    # Custom names settings
-    PROP_CUSTOM_NAMES_LIST = "custom_names_list"
-    TXT_CUSTOM_NAMES_DESC = "5"
+    # Aliases settings
+    PROP_ALIASES_LIST = "aliases_list"
+    TXT_ALIASES_DESC = "aliases_desc"
 
-    # Custom names parsing error texts
-    TXT_CUSTOM_NAMES_PATH_EXISTS = "6"
-    TXT_CUSTOM_NAMES_INVALID_FORMAT = "7"
-    TXT_CUSTOM_NAMES_INVALID_CHARACTERS = "8"
+    # Aliases parsing error texts
+    TXT_ALIASES_PATH_EXISTS = "aliases_path_exists_err"
+    TXT_ALIASES_INVALID_FORMAT = "aliases_invalid_format_err"
+    TXT_ALIASES_INVALID_CHARACTERS = "aliases_invalid_characters_err"
 
-    # Export / Import custom names section
-    PROP_CUSTOM_NAMES_EXPORT_PATH = "custom_names_export_path"
-    BTN_CUSTOM_NAMES_EXPORT = "9"
-    PROP_CUSTOM_NAMES_IMPORT_PATH = "custom_names_import_path"
-    BTN_CUSTOM_NAMES_IMPORT = "10"
+    # Export / Import aliases section
+    PROP_ALIASES_EXPORT_PATH = "aliases_export_path"
+    BTN_ALIASES_EXPORT = "aliases_export_btn"
+    PROP_ALIASES_IMPORT_PATH = "aliases_import_path"
+    BTN_ALIASES_IMPORT = "aliases_import_btn"
 
     # Other section
     PROP_RESTART_BUFFER = "restart_buffer"
     PROP_RESTART_BUFFER_LOOP = "restart_buffer_loop"
-    TXT_RESTART_BUFFER_LOOP = "11"
+    TXT_RESTART_BUFFER_LOOP = "restart_buffer_loop_desc"
 
     # Hotkeys
     HK_SAVE_BUFFER_MODE_1 = "save_buffer_force_mode_1"
@@ -337,33 +336,33 @@ PN = PropertiesNames
 
 
 # -------------------- exceptions.py --------------------
-class CustomNameParsingError(Exception):
+class AliasParsingError(Exception):
     """
-    Base exception for all custom names related exceptions.
+    Base exception for all alias related exceptions.
     """
     def __init__(self, index):
         """
-        :param index: custom name index.
+        :param index: alias index.
         """
         super(Exception).__init__()
         self.index = index
 
 
-class CustomNamePathAlreadyExists(CustomNameParsingError):
+class AliasPathAlreadyExists(AliasParsingError):
     """
-    Exception raised when a custom name is already exists.
-    """
-
-
-class CustomNameInvalidCharacters(CustomNameParsingError):
-    """
-    Exception raised when a custom name has invalid characters.
+    Exception raised when an alias is already exists.
     """
 
 
-class CustomNameInvalidFormat(CustomNameParsingError):
+class AliasInvalidCharacters(AliasParsingError):
     """
-    Exception raised when a custom name is invalid format.
+    Exception raised when an alias has invalid characters.
+    """
+
+
+class AliasInvalidFormat(AliasParsingError):
+    """
+    Exception raised when an alias is invalid format.
     """
 
 
@@ -726,20 +725,20 @@ def setup_popup_notification_settings(group_obj):
     )
 
 
-def setup_custom_names_settings(group_obj):
+def setup_aliases_settings(group_obj):
     obs.obs_properties_add_text(
         props=group_obj,
-        name=PN.TXT_CUSTOM_NAMES_DESC,
-        description="Since the executable name doesn't always match the name of the application/game "
-                    "(e.g. the game is called Deadlock, but the executable is project8.exe), "
-                    "you can set custom names for clips based on the name of the executable / folder "
-                    "where the executable is located.",
+        name=PN.TXT_ALIASES_DESC,
+        description="Executable (.exe) files often have names that don't match the actual game title "
+                    "(e.g., the game is called Deadlock, but the .exe file is named project8.exe)."
+                    "You can create an alias for the executable file or folder. "
+                    "Smart Replays will use this alias for renaming, rather than the .exe file name.",
         type=obs.OBS_TEXT_INFO
     )
 
     err_text_1 = obs.obs_properties_add_text(
         props=group_obj,
-        name=PN.TXT_CUSTOM_NAMES_INVALID_CHARACTERS,
+        name=PN.TXT_ALIASES_INVALID_CHARACTERS,
         description="""
     <div style="font-size: 14px">
     <span style="color: red">Invalid path or clip name value.<br></span>
@@ -752,14 +751,14 @@ def setup_custom_names_settings(group_obj):
 
     err_text_2 = obs.obs_properties_add_text(
         props=group_obj,
-        name=PN.TXT_CUSTOM_NAMES_PATH_EXISTS,
+        name=PN.TXT_ALIASES_PATH_EXISTS,
         description="""<div style="font-size: 14px; color: red">This path has already been added to the list.</div>""",
         type=obs.OBS_TEXT_INFO
     )
 
     err_text_3 = obs.obs_properties_add_text(
         props=group_obj,
-        name=PN.TXT_CUSTOM_NAMES_INVALID_FORMAT,
+        name=PN.TXT_ALIASES_INVALID_FORMAT,
         description="""
     <div style="font-size: 14px">
     <span style="color: red">Invalid format.<br></span>
@@ -773,9 +772,9 @@ def setup_custom_names_settings(group_obj):
     obs.obs_property_set_visible(err_text_2, False)
     obs.obs_property_set_visible(err_text_3, False)
 
-    custom_names_list = obs.obs_properties_add_editable_list(
+    aliases_list = obs.obs_properties_add_editable_list(
         props=group_obj,
-        name=PN.PROP_CUSTOM_NAMES_LIST,
+        name=PN.PROP_ALIASES_LIST,
         description="",
         type=obs.OBS_EDITABLE_LIST_TYPE_STRINGS,
         filter=None,
@@ -793,7 +792,7 @@ def setup_custom_names_settings(group_obj):
 
     obs.obs_properties_add_path(
         props=group_obj,
-        name=PN.PROP_CUSTOM_NAMES_IMPORT_PATH,
+        name=PN.PROP_ALIASES_IMPORT_PATH,
         description="",
         type=obs.OBS_PATH_FILE,
         filter=None,
@@ -802,14 +801,14 @@ def setup_custom_names_settings(group_obj):
 
     obs.obs_properties_add_button(
         group_obj,
-        PN.BTN_CUSTOM_NAMES_IMPORT,
-        "Import custom names",
-        import_custom_names_from_json_callback,
+        PN.BTN_ALIASES_IMPORT,
+        "Import aliases",
+        import_aliases_from_json_callback,
     )
 
     obs.obs_properties_add_path(
         props=group_obj,
-        name=PN.PROP_CUSTOM_NAMES_EXPORT_PATH,
+        name=PN.PROP_ALIASES_EXPORT_PATH,
         description="",
         type=obs.OBS_PATH_DIRECTORY,
         filter=None,
@@ -818,13 +817,13 @@ def setup_custom_names_settings(group_obj):
 
     obs.obs_properties_add_button(
         group_obj,
-        PN.BTN_CUSTOM_NAMES_EXPORT,
-        "Export custom names",
-        export_custom_names_to_json_callback,
+        PN.BTN_ALIASES_EXPORT,
+        "Export aliases",
+        export_aliases_to_json_callback,
     )
 
     # ----- Callbacks -----
-    obs.obs_property_set_modified_callback(custom_names_list, update_custom_names_callback)
+    obs.obs_property_set_modified_callback(aliases_list, update_aliases_callback)
 
 
 def setup_other_settings(group_obj):
@@ -873,14 +872,14 @@ def script_properties():
     # video_path_gr = obs.obs_properties_create()  # todo: for future updates
     notification_gr = obs.obs_properties_create()
     popup_gr = obs.obs_properties_create()
-    custom_names_gr = obs.obs_properties_create()
+    aliases_gr = obs.obs_properties_create()
     other_gr = obs.obs_properties_create()
 
     obs.obs_properties_add_group(p, PN.GR_CLIPS_PATH_SETTINGS, "Clip path settings", obs.OBS_GROUP_NORMAL, clip_path_gr)
     # obs.obs_properties_add_group(p, PN.GR_VIDEOS_PATH_SETTINGS, "Video path settings", obs.OBS_GROUP_NORMAL, video_path_gr)   # todo: for future updates
     obs.obs_properties_add_group(p, PN.GR_SOUND_NOTIFICATION_SETTINGS, "Sound notifications", obs.OBS_GROUP_CHECKABLE, notification_gr)
     obs.obs_properties_add_group(p, PN.GR_POPUP_NOTIFICATION_SETTINGS, "Popup notifications", obs.OBS_GROUP_CHECKABLE, popup_gr)
-    obs.obs_properties_add_group(p, PN.GR_EXE_ALIASES_SETTINGS, "Custom names", obs.OBS_GROUP_NORMAL, custom_names_gr)
+    obs.obs_properties_add_group(p, PN.GR_ALIASES_SETTINGS, "Aliases", obs.OBS_GROUP_NORMAL, aliases_gr)
     obs.obs_properties_add_group(p, PN.GR_OTHER_SETTINGS, "Other", obs.OBS_GROUP_NORMAL, other_gr)
 
     # ------ Setup properties ------
@@ -888,7 +887,7 @@ def script_properties():
     # setup_video_paths_settings(video_path_gr)   # todo: for future updates
     setup_notifications_settings(notification_gr)
     setup_popup_notification_settings(popup_gr)
-    setup_custom_names_settings(custom_names_gr)
+    setup_aliases_settings(aliases_gr)
     setup_other_settings(other_gr)
 
     return p
@@ -904,56 +903,56 @@ def open_github_callback(*args):
     webbrowser.open("https://github.com/qvvonk/smart_replays", 1)
 
 
-def update_custom_names_callback(p, prop, data):
+def update_aliases_callback(p, prop, data):
     """
-    Checks the list of custom names and updates custom names menu (shows / hides error texts).
+    Checks the list of aliases and updates aliases menu (shows / hides error texts).
     """
-    invalid_format_err_text = obs.obs_properties_get(p, PN.TXT_CUSTOM_NAMES_INVALID_FORMAT)
-    invalid_chars_err_text = obs.obs_properties_get(p, PN.TXT_CUSTOM_NAMES_INVALID_CHARACTERS)
-    path_exists_err_text = obs.obs_properties_get(p, PN.TXT_CUSTOM_NAMES_PATH_EXISTS)
+    invalid_format_err_text = obs.obs_properties_get(p, PN.TXT_ALIASES_INVALID_FORMAT)
+    invalid_chars_err_text = obs.obs_properties_get(p, PN.TXT_ALIASES_INVALID_CHARACTERS)
+    path_exists_err_text = obs.obs_properties_get(p, PN.TXT_ALIASES_PATH_EXISTS)
 
     settings_json: dict = json.loads(obs.obs_data_get_json(data))
     if not settings_json:
         return False
 
     try:
-        load_custom_names(settings_json)
+        load_aliases(settings_json)
         obs.obs_property_set_visible(invalid_format_err_text, False)
         obs.obs_property_set_visible(invalid_chars_err_text, False)
         obs.obs_property_set_visible(path_exists_err_text, False)
         return True
 
-    except CustomNameInvalidCharacters as e:
+    except AliasInvalidCharacters as e:
         obs.obs_property_set_visible(invalid_format_err_text, False)
         obs.obs_property_set_visible(invalid_chars_err_text, True)
         obs.obs_property_set_visible(path_exists_err_text, False)
         index = e.index
 
-    except CustomNameInvalidFormat as e:
+    except AliasInvalidFormat as e:
         obs.obs_property_set_visible(invalid_format_err_text, True)
         obs.obs_property_set_visible(invalid_chars_err_text, False)
         obs.obs_property_set_visible(path_exists_err_text, False)
         index = e.index
 
-    except CustomNamePathAlreadyExists as e:
+    except AliasPathAlreadyExists as e:
         obs.obs_property_set_visible(invalid_format_err_text, False)
         obs.obs_property_set_visible(invalid_chars_err_text, False)
         obs.obs_property_set_visible(path_exists_err_text, True)
         index = e.index
 
-    except CustomNameParsingError as e:
+    except AliasParsingError as e:
         index = e.index
 
     # If error in parsing
-    settings_json[PN.PROP_CUSTOM_NAMES_LIST].pop(index)
-    new_custom_names_array = obs.obs_data_array_create()
+    settings_json[PN.PROP_ALIASES_LIST].pop(index)
+    new_aliases_array = obs.obs_data_array_create()
 
-    for index, custom_name in enumerate(settings_json[PN.PROP_CUSTOM_NAMES_LIST]):
-        custom_name_data = obs.obs_data_create_from_json(json.dumps(custom_name))
-        obs.obs_data_array_insert(new_custom_names_array, index, custom_name_data)
+    for index, alias in enumerate(settings_json[PN.PROP_ALIASES_LIST]):
+        alias_data = obs.obs_data_create_from_json(json.dumps(alias))
+        obs.obs_data_array_insert(new_aliases_array, index, alias_data)
 
-    obs.obs_data_set_array(data, PN.PROP_CUSTOM_NAMES_LIST, new_custom_names_array)
-    obs.obs_data_array_release(new_custom_names_array)
+    obs.obs_data_set_array(data, PN.PROP_ALIASES_LIST, new_aliases_array)
+    obs.obs_data_array_release(new_aliases_array)
     return True
 
 
@@ -1037,11 +1036,11 @@ def check_base_path_callback(p, prop, data):
     return True
 
 
-def import_custom_names_from_json_callback(*args):
+def import_aliases_from_json_callback(*args):
     """
-    Imports custom names from JSON file.
+    Imports aliases from JSON file.
     """
-    path = obs.obs_data_get_string(VARIABLES.script_settings, PN.PROP_CUSTOM_NAMES_IMPORT_PATH)
+    path = obs.obs_data_get_string(VARIABLES.script_settings, PN.PROP_ALIASES_IMPORT_PATH)
     if not path or not os.path.exists(path) or not os.path.isfile(path):
         return False
 
@@ -1058,23 +1057,23 @@ def import_custom_names_from_json_callback(*args):
         item = obs.obs_data_create_from_json(json.dumps(i))
         obs.obs_data_array_insert(arr, index, item)
 
-    obs.obs_data_set_array(VARIABLES.script_settings, PN.PROP_CUSTOM_NAMES_LIST, arr)
+    obs.obs_data_set_array(VARIABLES.script_settings, PN.PROP_ALIASES_LIST, arr)
     return True
 
 
-def export_custom_names_to_json_callback(*args):
+def export_aliases_to_json_callback(*args):
     """
-    Exports custom names to JSON file.
+    Exports aliases to JSON file.
     """
-    path = obs.obs_data_get_string(VARIABLES.script_settings, PN.PROP_CUSTOM_NAMES_EXPORT_PATH)
+    path = obs.obs_data_get_string(VARIABLES.script_settings, PN.PROP_ALIASES_EXPORT_PATH)
     if not path or not os.path.exists(path) or not os.path.isdir(path):
         return False
 
-    custom_names_dict = json.loads(obs.obs_data_get_last_json(VARIABLES.script_settings))
-    custom_names_dict = custom_names_dict.get(PN.PROP_CUSTOM_NAMES_LIST) or CONSTANTS.DEFAULT_CUSTOM_NAMES
+    aliases_dict = json.loads(obs.obs_data_get_last_json(VARIABLES.script_settings))
+    aliases_dict = aliases_dict.get(PN.PROP_ALIASES_LIST) or CONSTANTS.DEFAULT_ALIASES
 
-    with open(os.path.join(path, "obs_smart_replays_custom_names.json"), "w") as f:
-        f.write(json.dumps(custom_names_dict, ensure_ascii=False))
+    with open(os.path.join(path, "obs_smart_replays_aliases.json"), "w", encoding="utf-8") as f:
+        f.write(json.dumps(aliases_dict, ensure_ascii=False))
 
 
 # -------------------- tech.py --------------------
@@ -1302,39 +1301,39 @@ def notify(success: bool, clip_path: Path, path_display_mode: PopupPathDisplayMo
             subprocess.Popen([python_exe, __file__, "Clip not saved", f"More in the logs.", "#C00000"])
 
 
-def load_custom_names(script_settings_dict: dict):
+def load_aliases(script_settings_dict: dict):
     """
-    Loads custom names to global custom_name variable.
+    Loads aliases to `VARIABLES.aliases`.
     Raises exception if path or name are invalid.
 
     :param script_settings_dict: Script settings as dict.
     """
-    _print("Loading custom names...")
+    _print("Loading aliases...")
 
-    new_custom_names = {}
-    custom_names_list = script_settings_dict.get(PN.PROP_CUSTOM_NAMES_LIST)
-    if custom_names_list is None:
-        custom_names_list = CONSTANTS.DEFAULT_CUSTOM_NAMES
+    new_aliases = {}
+    aliases_list = script_settings_dict.get(PN.PROP_ALIASES_LIST)
+    if aliases_list is None:
+        aliases_list = CONSTANTS.DEFAULT_ALIASES
 
-    for index, i in enumerate(custom_names_list):
+    for index, i in enumerate(aliases_list):
         value = i.get("value")
         spl = value.split(">", 1)
         try:
             path, name = spl[0].strip(), spl[1].strip()
         except IndexError:
-            raise CustomNameInvalidFormat(index)
+            raise AliasInvalidFormat(index)
 
         path = os.path.expandvars(path)
         if any(i in path for i in CONSTANTS.PATH_PROHIBITED_CHARS) or any(i in name for i in CONSTANTS.FILENAME_PROHIBITED_CHARS):
-            raise CustomNameInvalidCharacters(index)
+            raise AliasInvalidCharacters(index)
 
-        if Path(path) in new_custom_names.keys():
-            raise CustomNamePathAlreadyExists(index)
+        if Path(path) in new_aliases.keys():
+            raise AliasPathAlreadyExists(index)
 
-        new_custom_names[Path(path)] = name
+        new_aliases[Path(path)] = name
 
-    VARIABLES.custom_names = new_custom_names
-    _print(f"{len(VARIABLES.custom_names)} custom names are loaded.")
+    VARIABLES.aliases = new_aliases
+    _print(f"{len(VARIABLES.aliases)} aliases are loaded.")
 
 
 # -------------------- clipname_gen.py --------------------
@@ -1368,7 +1367,7 @@ def gen_clip_base_name(mode: ClipNamingModes | None = None) -> str:
                 executable_path = get_executable_path(get_active_window_pid())
 
         _print(f'Searching for {executable_path} in aliases list...')
-        if alias := get_exe_alias(executable_path, VARIABLES.custom_names):
+        if alias := get_alias(executable_path, VARIABLES.aliases):
             _print(f'Alias found: {alias}.')
             return alias
         else:
@@ -1381,16 +1380,16 @@ def gen_clip_base_name(mode: ClipNamingModes | None = None) -> str:
         return get_current_scene_name()
 
 
-def get_exe_alias(executable_path: str | Path, aliases_dict: dict[Path, str]) -> str | None:
+def get_alias(executable_path: str | Path, aliases_dict: dict[Path, str]) -> str | None:
     """
-    Retrieves a custom alias for the given executable path from the provided dictionary.
+    Retrieves an alias for the given executable path from the provided dictionary.
 
     The function first checks if the exact `executable_path` exists in `aliases_dict`.
     If not, it searches for the closest parent directory that is present in the dictionary.
 
     :param executable_path: A file path or string representing the executable.
     :param aliases_dict: A dictionary where keys are `Path` objects representing executable file paths
-                         or directories, and values are their corresponding custom aliases.
+                         or directories, and values are their corresponding aliases.
     :return: The corresponding alias if found, otherwise `None`.
     """
     exe_path = Path(executable_path)
@@ -1670,11 +1669,11 @@ def script_defaults(s):
     obs.obs_data_set_default_bool(s, PN.PROP_RESTART_BUFFER, True)
 
     arr = obs.obs_data_array_create()
-    for index, i in enumerate(CONSTANTS.DEFAULT_CUSTOM_NAMES):
+    for index, i in enumerate(CONSTANTS.DEFAULT_ALIASES):
         data = obs.obs_data_create_from_json(json.dumps(i))
         obs.obs_data_array_insert(arr, index, data)
 
-    obs.obs_data_set_default_array( s, PN.PROP_CUSTOM_NAMES_LIST, arr )
+    obs.obs_data_set_default_array(s, PN.PROP_ALIASES_LIST, arr)
     _print("The default values are set.")
 
 
@@ -1701,7 +1700,7 @@ def script_load(script_settings):
     # VARIABLES.update_available = check_updates(CONSTANTS.VERSION)  # todo: for future updates
 
     json_settings = json.loads(obs.obs_data_get_json(script_settings))
-    load_custom_names(json_settings)
+    load_aliases(json_settings)
 
     obs.obs_frontend_add_event_callback(on_buffer_save_callback)
     obs.obs_frontend_add_event_callback(on_buffer_recording_started_callback)
