@@ -1,4 +1,4 @@
-#  Smart Replays is an OBS script that allows more flexible replay buffer management:
+#  OBS Smart Replays is an OBS script that allows more flexible replay buffer management:
 #  set the clip name depending on the current window, set the file name format, etc.
 #  Copyright (C) 2024 qvvonk
 #
@@ -12,34 +12,39 @@
 #  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 #  GNU Affero General Public License for more details.
 
-from __future__ import annotations
-import os
-import re
-import sys
-import json
-import time
-import ctypes
-import pathlib
-import winsound
-import traceback
-import subprocess
-import webbrowser
-from pathlib import Path
-from ctypes import wintypes
-from datetime import datetime
-from collections import deque
-from threading import Lock, Thread
-from enum import Enum
-
 import tkinter as tk
+import time
+import sys
+import ctypes
+import re
+import json
+import traceback
+import webbrowser
+import os
+import winsound
+import subprocess
 from tkinter import font as f
+from enum import Enum
+from threading import Lock
+from threading import Thread
+from pathlib import Path
+from collections import deque
+from collections import defaultdict
+from urllib.request import urlopen
+from datetime import datetime
+from ctypes import wintypes
+from contextlib import suppress
+from typing import Any
 
 if __name__ != '__main__':
     import obspython as obs
 
 
-# UI
-# This part of the script calls only when it is run as a main program, not imported by OBS.
+# -------------------- ui.py --------------------
+# This part of the script uses only when it is run as a main program, not imported by OBS.
+#
+# You can run this script to show notification:
+# python smart_replays.py <Notification Title> <Notification Text> <Notification Color>
 class ScrollingText:
     def __init__(self,
                  canvas: tk.Canvas,
@@ -194,29 +199,37 @@ if __name__ == '__main__':
     color = sys.argv[3] if len(sys.argv) > 3 else "#76B900"
     NotificationWindow(t, m, color).show()
     sys.exit(0)
-# ------------- END OF SCRIPT -------------
 
 
-# ------------- OBS Script ----------------
-VERSION = "1.0.7"
-OBS_VERSION_STRING = obs.obs_get_version_string()
-OBS_VERSION_RE = re.compile(r'(\d+)\.(\d+)\.(\d+)')
-OBS_VERSION = [int(i) for i in OBS_VERSION_RE.match(OBS_VERSION_STRING).groups()]
-FORCE_MODE_LOCK = Lock()
-NAME_PROHIBITED_CHARS = r'/\:"<>*?|%'
-PATH_PROHIBITED_CHARS = r'"<>*?|%'
-DEFAULT_FILENAME_FORMAT = "%NAME_%d.%m.%Y_%H-%M-%S"
-DEFAULT_CUSTOM_NAMES = [
-    {"value": "C:\\Windows\\explorer.exe > Desktop", "selected": False, "hidden": False},
-    {"value": f"{sys.executable} > OBS", "selected": False, "hidden": False}
-]
-
+# -------------------- globals.py --------------------
 user32 = ctypes.windll.user32
-exe_history: deque | None = None
-custom_names: dict[Path, str] = {}
-script_settings = None
-hotkey_ids: dict = {}
-force_mode = 0
+
+
+class CONSTANTS:
+    VERSION = "1.0.8"
+    OBS_VERSION_STRING = obs.obs_get_version_string()
+    OBS_VERSION_RE = re.compile(r'(\d+)\.(\d+)\.(\d+)')
+    OBS_VERSION = [int(i) for i in OBS_VERSION_RE.match(OBS_VERSION_STRING).groups()]
+    CLIPS_FORCE_MODE_LOCK = Lock()
+    VIDEOS_FORCE_MODE_LOCK = Lock()
+    FILENAME_PROHIBITED_CHARS = r'/\:"<>*?|%'
+    PATH_PROHIBITED_CHARS = r'"<>*?|%'
+    DEFAULT_FILENAME_FORMAT = "%NAME_%d.%m.%Y_%H-%M-%S"
+    DEFAULT_ALIASES = (
+        {"value": "C:\\Windows\\explorer.exe > Desktop", "selected": False, "hidden": False},
+        {"value": f"{sys.executable} > OBS", "selected": False, "hidden": False}
+    )
+
+
+class VARIABLES:
+    update_available: bool = False
+    clip_exe_history: deque[Path, ...] | None = None
+    video_exe_history: defaultdict[Path, int] | None = None  # {Path(path/to/executable): active_seconds_amount
+    exe_path_on_video_stopping_event: Path | None = None
+    aliases: dict[Path, str] = {}
+    script_settings = None
+    hotkey_ids: dict = {}
+    force_mode = None
 
 
 class ConfigTypes(Enum):
@@ -225,173 +238,159 @@ class ConfigTypes(Enum):
     USER = 2
 
 
-class LASTINPUTINFO(ctypes.Structure):
-    _fields_ = [("cbSize", wintypes.UINT),
-                ("dwTime", wintypes.DWORD)]
+class ClipNamingModes(Enum):
+    CURRENT_PROCESS = 0
+    MOST_RECORDED_PROCESS = 1
+    CURRENT_SCENE = 2
 
 
-def _print(*values, sep: str | None = None, end: str | None = None, file=None, flush: bool = False):
-    time_ = datetime.now()
-    str_time = time_.strftime(f"%d.%m.%Y %H:%M:%S")
-    prefix = f"[{str_time}]"
-    print(prefix, *values, sep=sep, end=end, file=file, flush=flush)
+class VideoNamingModes(Enum):
+    CURRENT_PROCESS = 0
+    MOST_RECORDED_PROCESS = 1
+    CURRENT_SCENE = 2
 
 
-# Exceptions
-class CustomNameParsingError(Exception):
-    def __init__(self, index):
-        super().__init__(Exception)
-        self.index = index
+class PopupPathDisplayModes(Enum):
+    FULL_PATH = 0
+    FOLDER_AND_FILE = 1
+    JUST_FOLDER = 2
+    JUST_FILE = 3
 
 
-class CustomNamePathAlreadyExists(CustomNameParsingError):
-    def __init__(self, index):
-        super().__init__(index)
-
-
-class CustomNameInvalidCharacters(CustomNameParsingError):
-    def __init__(self, index):
-        super().__init__(index)
-
-
-class CustomNameInvalidFormat(CustomNameParsingError):
-    def __init__(self, index):
-        super().__init__(index)
-
-
-# Properties names
 class PropertiesNames:
-    GR_PATHS = "paths"
-    GR_NOTIFICATIONS = "notifications"
-    GR_POPUP = "popup"
-    GR_CUSTOM_NAMES = "custom_names"
-    GR_OTHER = "other"
+    # Prop groups
+    GR_CLIPS_PATH_SETTINGS = "clips_path_settings"
+    GR_VIDEOS_PATH_SETTINGS = "videos_path_settings"
+    GR_SOUND_NOTIFICATION_SETTINGS = "sound_notification_settings"
+    GR_POPUP_NOTIFICATION_SETTINGS = "popup_notification_settings"
+    GR_ALIASES_SETTINGS = "aliases_settings"
+    GR_OTHER_SETTINGS = "other_settings"
 
-    PROP_BASE_PATH = "base_path"
-    TEXT_BASE_PATH_INFO = "base_path_info"
-    PROP_FILENAME_CONDITION = "filename_condition"
-    TXT_HOTKEY_TIP = "hotkey_tip"
-    PROP_FILENAME_FORMAT = "filename_format"
-    TXT_FILENAME_FORMAT_ERR = "filename_format_err"
-    PROP_SAVE_TO_FOLDER = "save_to_folder"
+    # Clips path settings
+    PROP_CLIPS_BASE_PATH = "clips_base_path"
+    TXT_CLIPS_BASE_PATH_WARNING = "clips_base_path_warning"
+    PROP_CLIPS_NAMING_MODE = "clips_naming_mode"
+    TXT_CLIPS_HOTKEY_TIP = "clips_hotkey_tip"
+    PROP_CLIPS_FILENAME_TEMPLATE = "clips_filename_template"
+    TXT_CLIPS_FILENAME_TEMPLATE_ERR = "clips_filename_template_err"
+    PROP_CLIPS_SAVE_TO_FOLDER = "clips_save_to_folder"
+    PROP_CLIPS_ONLY_FORCE_MODE = "clips_only_force_mode" # todo
+    PROP_CLIPS_CREATE_LINKS = "clips_create_links"
+    PROP_CLIPS_LINKS_FOLDER_PATH = "clips_links_folder_path"
+    TXT_CLIPS_LINKS_FOLDER_PATH_WARNING = "clips_links_folder_path_warning"
 
-    PROP_NOTIFICATION_ON_SUCCESS = "notification_on_success"
-    PROP_NOTIFICATION_ON_SUCCESS_PATH = "notification_on_success_file"
-    PROP_NOTIFICATION_ON_FAILURE = "notification_on_failure"
-    PROP_NOTIFICATION_ON_FAILURE_PATH = "notification_on_failure_file"
+    # Videos path settings
+    PROP_VIDEOS_NAMING_MODE = "videos_naming_mode"
+    TXT_VIDEOS_HOTKEY_TIP = "videos_hotkey_tip"
+    PROP_VIDEOS_FILENAME_FORMAT = "videos_filename_format"
+    TXT_VIDEOS_FILENAME_FORMAT_ERR = "videos_filename_format_err"
+    PROP_VIDEOS_SAVE_TO_FOLDER = "videos_save_to_folder"
+    PROP_VIDEOS_ONLY_FORCE_MODE = "videos_only_force_mode"
 
-    PROP_POPUP_ON_SUCCESS = "prop_popup_on_success"
-    PROP_POPUP_ON_FAILURE = "prop_popup_on_failure"
-    PROP_POPUP_PATH_TYPE = "prop_popup_path_type"
+    # Sound notification settings
+    PROP_NOTIFY_CLIPS_ON_SUCCESS = "notify_clips_on_success"
+    PROP_NOTIFY_CLIPS_ON_SUCCESS_PATH = "notify_clips_on_success_path"
+    PROP_NOTIFY_CLIPS_ON_FAILURE = "notify_clips_on_failure"
+    PROP_NOTIFY_CLIPS_ON_FAILURE_PATH = "notify_clips_on_failure_path"
+    PROP_NOTIFY_VIDEOS_ON_SUCCESS = "notify_videos_on_success"
+    PROP_NOTIFY_VIDEOS_ON_SUCCESS_PATH = "notify_videos_on_success_path"
+    PROP_NOTIFY_VIDEOS_ON_FAILURE = "notify_videos_on_failure"
+    PROP_NOTIFY_VIDEOS_ON_FAILURE_PATH = "notify_videos_on_failure_path"
 
-    PROP_CUSTOM_NAMES_LIST = "custom_names_list"
-    TXT_CUSTOM_NAME_DESC = "custom_names_desc"
+    # Popup notification settings
+    PROP_POPUP_CLIPS_ON_SUCCESS = "popup_clips_on_success"
+    PROP_POPUP_CLIPS_ON_FAILURE = "popup_clips_on_failure"
+    PROP_POPUP_VIDEOS_ON_SUCCESS = "popup_videos_on_success"
+    PROP_POPUP_VIDEOS_ON_FAILURE = "popup_videos_on_failure"
+    PROP_POPUP_PATH_DISPLAY_MODE = "prop_popup_path_display_mode"
 
-    TXT_CUSTOM_NAMES_PATH_EXISTS = "custom_names_path_exists_err"
-    TXT_CUSTOM_NAMES_INVALID_FORMAT = "custom_names_invalid_format_err"
-    TXT_CUSTOM_NAMES_INVALID_CHARACTERS = "custom_names_invalid_characters_err"
+    # Aliases settings
+    PROP_ALIASES_LIST = "aliases_list"
+    TXT_ALIASES_DESC = "aliases_desc"
 
-    PROP_CUSTOM_NAMES_EXPORT_PATH = "custom_names_export_path"
-    BTN_CUSTOM_NAMES_EXPORT = "btn_custom_names_export"
-    PROP_CUSTOM_NAMES_IMPORT_PATH = "custom_names_import_path"
-    BTN_CUSTOM_NAMES_IMPORT = "btn_custom_names_import"
+    # Aliases parsing error texts
+    TXT_ALIASES_PATH_EXISTS = "aliases_path_exists_err"
+    TXT_ALIASES_INVALID_FORMAT = "aliases_invalid_format_err"
+    TXT_ALIASES_INVALID_CHARACTERS = "aliases_invalid_characters_err"
 
+    # Export / Import aliases section
+    PROP_ALIASES_EXPORT_PATH = "aliases_export_path"
+    BTN_ALIASES_EXPORT = "aliases_export_btn"
+    PROP_ALIASES_IMPORT_PATH = "aliases_import_path"
+    BTN_ALIASES_IMPORT = "aliases_import_btn"
+
+    # Other section
     PROP_RESTART_BUFFER = "restart_buffer"
     PROP_RESTART_BUFFER_LOOP = "restart_buffer_loop"
-    TXT_RESTART_BUFFER_LOOP = "txt_restart_buffer_loop"
+    TXT_RESTART_BUFFER_LOOP = "restart_buffer_loop_desc"
 
-    HK_SAVE_BUFFER_MODE_1 = "obssmartreplayshk1"
-    HK_SAVE_BUFFER_MODE_2 = "obssmartreplayshk2"
-    HK_SAVE_BUFFER_MODE_3 = "obssmartreplayshk3"
+    # Hotkeys
+    HK_SAVE_BUFFER_MODE_1 = "save_buffer_force_mode_1"
+    HK_SAVE_BUFFER_MODE_2 = "save_buffer_force_mode_2"
+    HK_SAVE_BUFFER_MODE_3 = "save_buffer_force_mode_3"
+    HK_SAVE_VIDEO_MODE_1 = "save_video_force_mode_1"
+    HK_SAVE_VIDEO_MODE_2 = "save_video_force_mode_2"
+    HK_SAVE_VIDEO_MODE_3 = "save_video_force_mode_3"
 
 PN = PropertiesNames
 
 
-def script_properties():
-    p = obs.obs_properties_create()  # main p
-    paths_props = obs.obs_properties_create()
-    notification_props = obs.obs_properties_create()
-    popup_props = obs.obs_properties_create()
-    custom_names_props = obs.obs_properties_create()
-    other_props = obs.obs_properties_create()
+# -------------------- exceptions.py --------------------
+class AliasParsingError(Exception):
+    """
+    Base exception for all alias related exceptions.
+    """
+    def __init__(self, index):
+        """
+        :param index: alias index.
+        """
+        super(Exception).__init__()
+        self.index = index
 
-    # Like btn
-    obs.obs_properties_add_button(
-        p,
-        "like_btn",
-        "🌟 Like this script? Star it! 🌟",
-        open_github_callback
-    )
 
-    # ------ Groups ------
-    obs.obs_properties_add_group(p, PN.GR_PATHS, "Paths settings", obs.OBS_PROPERTY_GROUP, paths_props)
-    obs.obs_properties_add_group(p, PN.GR_NOTIFICATIONS, "Sound notifications", obs.OBS_GROUP_CHECKABLE, notification_props)
-    obs.obs_properties_add_group(p, PN.GR_POPUP, "Popup notifications", obs.OBS_GROUP_CHECKABLE, popup_props)
-    obs.obs_properties_add_group(p, PN.GR_CUSTOM_NAMES, "Custom names", obs.OBS_GROUP_NORMAL, custom_names_props)
-    obs.obs_properties_add_group(p, PN.GR_OTHER, "Other", obs.OBS_GROUP_NORMAL, other_props)
+class AliasPathAlreadyExists(AliasParsingError):
+    """
+    Exception raised when an alias is already exists.
+    """
 
-    # ------ Paths settings ------
-    # Base path
-    base_path_prop = obs.obs_properties_add_path(
-        props=paths_props,
-        name=PN.PROP_BASE_PATH,
-        description="Base path for clips",
-        type=obs.OBS_PATH_DIRECTORY,
-        filter=None,
-        default_path="C:\\"
-    )
-    t = obs.obs_properties_add_text(
-        props=paths_props,
-        name=PN.TEXT_BASE_PATH_INFO,
-        description="The path must be on the same disk as the path for OBS records "
-                    "(File -> Settings -> Output -> Recording -> Recording Path).\n"
-                    "Otherwise, the script will not be able to move the clip to the correct folder.",
-        type=obs.OBS_TEXT_INFO
-    )
-    obs.obs_property_text_set_info_type(t, obs.OBS_TEXT_INFO_WARNING)
 
-    # Filename condition
-    filename_condition = obs.obs_properties_add_list(
-        props=paths_props,
-        name=PN.PROP_FILENAME_CONDITION,
-        description="Clip name depends on",
-        type=obs.OBS_COMBO_TYPE_RADIO,
-        format=obs.OBS_COMBO_FORMAT_INT
-    )
-    obs.obs_property_list_add_int(
-        p=filename_condition,
-        name="the name of an active app (.exe file name) at the moment of clip saving",
-        val=1
-    )
-    obs.obs_property_list_add_int(
-        p=filename_condition,
-        name="the name of an app (.exe file name) that was active most of the time during the clip recording",
-        val=2
-    )
-    obs.obs_property_list_add_int(
-        p=filename_condition,
-        name="the name of the current scene",
-        val=3
-    )
+class AliasInvalidCharacters(AliasParsingError):
+    """
+    Exception raised when an alias has invalid characters.
+    """
 
-    t = obs.obs_properties_add_text(
-        props=paths_props,
-        name = PN.TXT_HOTKEY_TIP,
-        description="You can customize hotkeys for each mode in File -> Settings -> Hotkeys",
-        type=obs.OBS_TEXT_INFO
-    )
-    obs.obs_property_text_set_info_type(t, obs.OBS_TEXT_INFO_WARNING)
 
-    # Filename format
-    filename_format_prop = obs.obs_properties_add_text(
-        props=paths_props,
-        name=PN.PROP_FILENAME_FORMAT,
-        description="File name format",
-        type=obs.OBS_TEXT_DEFAULT
-    )
-    obs.obs_property_set_long_description(
-        filename_format_prop,
-        """<table>
+class AliasInvalidFormat(AliasParsingError):
+    """
+    Exception raised when an alias is invalid format.
+    """
+
+
+# -------------------- updates_check.py --------------------
+def get_latest_release_tag() -> dict | None:  # todo: for future updates
+    url = "https://api.github.com/repos/qvvonk/smart_replays/releases/latest"
+
+    try:
+        with urlopen(url, timeout=2) as response:
+            if response.status == 200:
+                data = json.load(response)
+                return data.get('tag_name')
+    except:
+        _print(f"Failed to check updates.")
+        _print(traceback.format_exc())
+    return None
+
+
+def check_updates(current_version: str):  # todo: for future updates
+    latest_version = get_latest_release_tag()
+    _print(latest_version)
+    if latest_version and f'v{current_version}' != latest_version:
+        return True
+    return False
+
+
+# -------------------- properties.py --------------------
+variables_tip = """<table>
 <tr><th align='left'>%NAME</th><td> - name of the clip.</td></tr>
 
 <tr><th align='left'>%a</th><td> - Weekday as locale’s abbreviated name.<br/>
@@ -455,32 +454,204 @@ Example: 00, 01, …, 53</td></tr>
 Example: 00, 01, …, 53</td></tr>
 
 <tr><th align='left'>%%</th><td> - A literal '%' character.</td></tr>
-</table>""")
+</table>"""
 
-    filename_format_err_text = obs.obs_properties_add_text(
-        props=paths_props,
-        name=PN.TXT_FILENAME_FORMAT_ERR,
+
+def setup_clip_paths_settings(group_obj):
+    # ----- Clips base path -----
+    base_path_prop = obs.obs_properties_add_path(
+        props=group_obj,
+        name=PN.PROP_CLIPS_BASE_PATH,
+        description="Base path for clips",
+        type=obs.OBS_PATH_DIRECTORY,
+        filter=None,
+        default_path=str(get_base_path())
+    )
+
+    t = obs.obs_properties_add_text(
+        props=group_obj,
+        name=PN.TXT_CLIPS_BASE_PATH_WARNING,
+        description="The path must be on the same disk as the path for OBS records "
+                    "(File -> Settings -> Output -> Recording -> Recording Path).\n"
+                    "Otherwise, the script will not be able to move the clip to the correct folder.",
+        type=obs.OBS_TEXT_INFO
+    )
+
+    obs.obs_property_text_set_info_type(t, obs.OBS_TEXT_INFO_WARNING)
+
+    # ----- Clip naming mode -----
+    clip_naming_mode_prop = obs.obs_properties_add_list(
+        props=group_obj,
+        name=PN.PROP_CLIPS_NAMING_MODE,
+        description="Clip name based on",
+        type=obs.OBS_COMBO_TYPE_RADIO,
+        format=obs.OBS_COMBO_FORMAT_INT
+    )
+    obs.obs_property_list_add_int(
+        p=clip_naming_mode_prop,
+        name="the name of an active app (.exe file name) at the moment of clip saving;",
+        val=ClipNamingModes.CURRENT_PROCESS.value
+    )
+    obs.obs_property_list_add_int(
+        p=clip_naming_mode_prop,
+        name="the name of an app (.exe file name) that was active most of the time during the clip recording;",
+        val=ClipNamingModes.MOST_RECORDED_PROCESS.value
+    )
+    obs.obs_property_list_add_int(
+        p=clip_naming_mode_prop,
+        name="the name of the current scene;",
+        val=ClipNamingModes.CURRENT_SCENE.value
+    )
+
+    t = obs.obs_properties_add_text(
+        props=group_obj,
+        name=PN.TXT_CLIPS_HOTKEY_TIP,
+        description="You can set up hotkeys for each mode in File -> Settings -> Hotkeys",
+        type=obs.OBS_TEXT_INFO
+    )
+    obs.obs_property_text_set_info_type(t, obs.OBS_TEXT_INFO_WARNING)
+
+    # ----- Clip file name format -----
+    filename_format_prop = obs.obs_properties_add_text(
+        props=group_obj,
+        name=PN.PROP_CLIPS_FILENAME_TEMPLATE,
+        description="File name format",
+        type=obs.OBS_TEXT_DEFAULT
+    )
+    obs.obs_property_set_long_description(
+        filename_format_prop,
+        variables_tip)
+
+    t = obs.obs_properties_add_text(
+        props=group_obj,
+        name=PN.TXT_CLIPS_FILENAME_TEMPLATE_ERR,
         description="<font color=\"red\"><pre> Invalid format!</pre></font>",
         type=obs.OBS_TEXT_INFO
     )
-    obs.obs_property_set_visible(filename_format_err_text, False)
+    obs.obs_property_set_visible(t, False)
 
-    # Save to folders
+    # ----- Save to folders checkbox -----
     obs.obs_properties_add_bool(
-        props=paths_props,
-        name=PN.PROP_SAVE_TO_FOLDER,
-        description="Create different folders for different clip names",
+        props=group_obj,
+        name=PN.PROP_CLIPS_SAVE_TO_FOLDER,
+        description="Sort clips into folders by application or scene",
     )
 
-    # ------ Notification Settings ------
+    # ----- Create links -----
+    create_links_prop = obs.obs_properties_add_bool(
+        props=group_obj,
+        name=PN.PROP_CLIPS_CREATE_LINKS,
+        description="Create hard links for clips",
+    )
+
+    links_path_prop = obs.obs_properties_add_path(
+        props=group_obj,
+        name=PN.PROP_CLIPS_LINKS_FOLDER_PATH,
+        description="Links folder",
+        type=obs.OBS_PATH_DIRECTORY,
+        filter=None,
+        default_path=str(get_base_path())
+    )
+    links_path_warn = obs.obs_properties_add_text(
+        props=group_obj,
+        name=PN.TXT_CLIPS_LINKS_FOLDER_PATH_WARNING,
+        description="The path must be on the same disk as the path for OBS records "
+                    "(File -> Settings -> Output -> Recording -> Recording Path).\n"
+                    "Otherwise, the script will not be able to create link to the file.",
+        type=obs.OBS_TEXT_INFO
+    )
+    obs.obs_property_text_set_info_type(links_path_warn, obs.OBS_TEXT_INFO_WARNING)
+
+    obs.obs_property_set_visible(links_path_prop,
+                                 obs.obs_data_get_bool(VARIABLES.script_settings,
+                                                       PN.PROP_CLIPS_CREATE_LINKS))
+    obs.obs_property_set_visible(links_path_warn,
+                                 obs.obs_data_get_bool(VARIABLES.script_settings,
+                                                       PN.PROP_CLIPS_CREATE_LINKS))
+
+    # ----- Callbacks -----
+    obs.obs_property_set_modified_callback(base_path_prop, check_base_path_callback)
+    obs.obs_property_set_modified_callback(filename_format_prop, check_filename_template_callback)
+    obs.obs_property_set_modified_callback(create_links_prop, update_links_path_prop_visibility)
+    obs.obs_property_set_modified_callback(links_path_prop, check_clips_links_folder_path_callback)
+
+
+def setup_video_paths_settings(group_obj):
+    # ----- Video name condition -----
+    filename_condition = obs.obs_properties_add_list(
+        props=group_obj,
+        name=PN.PROP_VIDEOS_NAMING_MODE,
+        description="Video name based on",
+        type=obs.OBS_COMBO_TYPE_RADIO,
+        format=obs.OBS_COMBO_FORMAT_INT
+    )
+    obs.obs_property_list_add_int(
+        p=filename_condition,
+        name="the name of an active app (.exe file name) at the moment of video saving",
+        val=1
+    )
+    obs.obs_property_list_add_int(
+        p=filename_condition,
+        name="the name of an app (.exe file name) that was active most of the time during the video recording",
+        val=2
+    )
+    obs.obs_property_list_add_int(
+        p=filename_condition,
+        name="the name of the current scene",
+        val=3
+    )
+
+    t = obs.obs_properties_add_text(
+        props=group_obj,
+        name=PN.TXT_VIDEOS_HOTKEY_TIP,
+        description="You can set up hotkeys for each mode in File -> Settings -> Hotkeys",
+        type=obs.OBS_TEXT_INFO
+    )
+    obs.obs_property_text_set_info_type(t, obs.OBS_TEXT_INFO_WARNING)
+
+    # ----- Video file name format -----
+    filename_format_prop = obs.obs_properties_add_text(
+        props=group_obj,
+        name=PN.PROP_VIDEOS_FILENAME_FORMAT,
+        description="File name format",
+        type=obs.OBS_TEXT_DEFAULT
+    )
+    obs.obs_property_set_long_description(
+        filename_format_prop,
+        variables_tip)
+
+    t = obs.obs_properties_add_text(
+        props=group_obj,
+        name=PN.TXT_VIDEOS_FILENAME_FORMAT_ERR,
+        description="<font color=\"red\"><pre> Invalid format!</pre></font>",
+        type=obs.OBS_TEXT_INFO
+    )
+    obs.obs_property_set_visible(t, False)
+
+    # ----- Save to folders checkbox -----
+    obs.obs_properties_add_bool(
+        props=group_obj,
+        name=PN.PROP_VIDEOS_SAVE_TO_FOLDER,
+        description="Create different folders for different video names",
+    )
+
+    # ----- Rename only if force mode -----
+    obs.obs_properties_add_bool(
+        props=group_obj,
+        name=PN.PROP_VIDEOS_ONLY_FORCE_MODE,
+        description="Rename and move the video only if it was saved using the script's hotkeys"
+    )
+
+
+def setup_notifications_settings(group_obj):
     notification_success_prop = obs.obs_properties_add_bool(
-        props=notification_props,
-        name=PN.PROP_NOTIFICATION_ON_SUCCESS,
+        props=group_obj,
+        name=PN.PROP_NOTIFY_CLIPS_ON_SUCCESS,
         description="On success"
     )
-    obs.obs_properties_add_path(
-        props=notification_props,
-        name=PN.PROP_NOTIFICATION_ON_SUCCESS_PATH,
+    success_path_prop = obs.obs_properties_add_path(
+        props=group_obj,
+        name=PN.PROP_NOTIFY_CLIPS_ON_SUCCESS_PATH,
         description="",
         type=obs.OBS_PATH_FILE,
         filter=None,
@@ -488,102 +659,112 @@ Example: 00, 01, …, 53</td></tr>
     )
 
     notification_failure_prop = obs.obs_properties_add_bool(
-        props=notification_props,
-        name=PN.PROP_NOTIFICATION_ON_FAILURE,
+        props=group_obj,
+        name=PN.PROP_NOTIFY_CLIPS_ON_FAILURE,
         description="On failure"
     )
-    obs.obs_properties_add_path(
-        props=notification_props,
-        name=PN.PROP_NOTIFICATION_ON_FAILURE_PATH,
+    failure_path_prop = obs.obs_properties_add_path(
+        props=group_obj,
+        name=PN.PROP_NOTIFY_CLIPS_ON_FAILURE_PATH,
         description="",
         type=obs.OBS_PATH_FILE,
         filter=None,
         default_path="C:\\"
     )
 
-    update_notifications_menu_callback(p, None, script_settings)
+    obs.obs_property_set_visible(success_path_prop,
+                                 obs.obs_data_get_bool(VARIABLES.script_settings, PN.PROP_NOTIFY_CLIPS_ON_SUCCESS))
+    obs.obs_property_set_visible(failure_path_prop,
+                                 obs.obs_data_get_bool(VARIABLES.script_settings, PN.PROP_NOTIFY_CLIPS_ON_FAILURE))
 
-    # ------ Popup notifications ------
+    # ----- Callbacks ------
+    obs.obs_property_set_modified_callback(notification_success_prop, update_notifications_menu_callback)
+    obs.obs_property_set_modified_callback(notification_failure_prop, update_notifications_menu_callback)
+
+
+def setup_popup_notification_settings(group_obj):
     obs.obs_properties_add_bool(
-        props=popup_props,
-        name=PN.PROP_POPUP_ON_SUCCESS,
+        props=group_obj,
+        name=PN.PROP_POPUP_CLIPS_ON_SUCCESS,
         description="On success"
     )
 
     obs.obs_properties_add_bool(
-        props=popup_props,
-        name=PN.PROP_POPUP_ON_FAILURE,
+        props=group_obj,
+        name=PN.PROP_POPUP_CLIPS_ON_FAILURE,
         description="On failure"
     )
 
     popup_path_type = obs.obs_properties_add_list(
-        props=popup_props,
-        name=PN.PROP_POPUP_PATH_TYPE,
-        description="Display",
+        props=group_obj,
+        name=PN.PROP_POPUP_PATH_DISPLAY_MODE,
+        description="Show",
         type=obs.OBS_COMBO_TYPE_RADIO,
         format=obs.OBS_COMBO_FORMAT_INT
     )
     obs.obs_property_list_add_int(
         p=popup_path_type,
         name="full path",
-        val=1
+        val=PopupPathDisplayModes.FULL_PATH.value
     )
     obs.obs_property_list_add_int(
         p=popup_path_type,
         name="folder and file name",
-        val=2
+        val=PopupPathDisplayModes.FOLDER_AND_FILE.value
     )
     obs.obs_property_list_add_int(
         p=popup_path_type,
         name="just folder",
-        val=3
+        val=PopupPathDisplayModes.JUST_FOLDER.value
     )
 
     obs.obs_property_list_add_int(
         p=popup_path_type,
         name="just file name",
-        val=4
+        val=PopupPathDisplayModes.JUST_FILE.value
     )
-    # ------ Custom names settings ------
+
+
+def setup_aliases_settings(group_obj):
     obs.obs_properties_add_text(
-        props=custom_names_props,
-        name=PN.TXT_CUSTOM_NAME_DESC,
-        description="Since the executable name doesn't always match the name of the application/game "
-                    "(e.g. the game is called Deadlock, but the executable is project8.exe), "
-                    "you can set custom names for clips based on the name of the executable / folder "
-                    "where the executable is located.",
+        props=group_obj,
+        name=PN.TXT_ALIASES_DESC,
+        description="Executable (.exe) files often have names that don't match the actual game title "
+                    "(e.g., the game is called Deadlock, but the .exe file is named project8.exe)."
+                    "You can create an alias for the executable file or folder. "
+                    "Smart Replays will use this alias for renaming, rather than the .exe file name.",
         type=obs.OBS_TEXT_INFO
     )
 
     err_text_1 = obs.obs_properties_add_text(
-        props=custom_names_props,
-        name=PN.TXT_CUSTOM_NAMES_INVALID_CHARACTERS,
+        props=group_obj,
+        name=PN.TXT_ALIASES_INVALID_CHARACTERS,
         description="""
-<div style="font-size: 14px">
-<span style="color: red">Invalid path or clip name value.<br></span>
-<span style="color: orange">Clip name cannot contain <code style="color: cyan">&lt; &gt; / \\ | * ? : " %</code> characters.<br>
-Path cannot contain <code style="color: cyan">&lt; &gt; | * ? " %</code> characters.</span>
-</div>
-""",
+    <div style="font-size: 14px">
+    <span style="color: red">Invalid path or clip name value.<br></span>
+    <span style="color: orange">Clip name cannot contain <code style="color: cyan">&lt; &gt; / \\ | * ? : " %</code> characters.<br>
+    Path cannot contain <code style="color: cyan">&lt; &gt; | * ? " %</code> characters.</span>
+    </div>
+    """,
         type=obs.OBS_TEXT_INFO
     )
 
     err_text_2 = obs.obs_properties_add_text(
-        props=custom_names_props,
-        name=PN.TXT_CUSTOM_NAMES_PATH_EXISTS,
+        props=group_obj,
+        name=PN.TXT_ALIASES_PATH_EXISTS,
         description="""<div style="font-size: 14px; color: red">This path has already been added to the list.</div>""",
         type=obs.OBS_TEXT_INFO
     )
 
     err_text_3 = obs.obs_properties_add_text(
-        props=custom_names_props,
-        name=PN.TXT_CUSTOM_NAMES_INVALID_FORMAT,
+        props=group_obj,
+        name=PN.TXT_ALIASES_INVALID_FORMAT,
         description="""
-<div style="font-size: 14px">
-<span style="color: red">Invalid format.<br></span>
-<span style="color: orange">Required format: DISK:\\path\\to\\folder\\or\\executable > ClipName<br></span>
-<span style="color: lightgreen">Example: C:\\Program Files\\Minecraft > Minecraft</span>
-</div>""",
+    <div style="font-size: 14px">
+    <span style="color: red">Invalid format.<br></span>
+    <span style="color: orange">Required format: DISK:\\path\\to\\folder\\or\\executable > ClipName<br></span>
+    <span style="color: lightgreen">Example: C:\\Program Files\\Minecraft > Minecraft</span>
+    </div>""",
         type=obs.OBS_TEXT_INFO
     )
 
@@ -591,9 +772,9 @@ Path cannot contain <code style="color: cyan">&lt; &gt; | * ? " %</code> charact
     obs.obs_property_set_visible(err_text_2, False)
     obs.obs_property_set_visible(err_text_3, False)
 
-    custom_names_list = obs.obs_properties_add_editable_list(
-        props=custom_names_props,
-        name=PN.PROP_CUSTOM_NAMES_LIST,
+    aliases_list = obs.obs_properties_add_editable_list(
+        props=group_obj,
+        name=PN.PROP_ALIASES_LIST,
         description="",
         type=obs.OBS_EDITABLE_LIST_TYPE_STRINGS,
         filter=None,
@@ -601,7 +782,7 @@ Path cannot contain <code style="color: cyan">&lt; &gt; | * ? " %</code> charact
     )
 
     t = obs.obs_properties_add_text(
-        props=custom_names_props,
+        props=group_obj,
         name="temp",
         description="Format:  DISK:\\path\\to\\folder\\or\\executable > ClipName\n"
                     f"Example: {sys.executable} > OBS",
@@ -610,8 +791,8 @@ Path cannot contain <code style="color: cyan">&lt; &gt; | * ? " %</code> charact
     obs.obs_property_text_set_info_type(t, obs.OBS_TEXT_INFO_WARNING)
 
     obs.obs_properties_add_path(
-        props=custom_names_props,
-        name=PN.PROP_CUSTOM_NAMES_IMPORT_PATH,
+        props=group_obj,
+        name=PN.PROP_ALIASES_IMPORT_PATH,
         description="",
         type=obs.OBS_PATH_FILE,
         filter=None,
@@ -619,15 +800,15 @@ Path cannot contain <code style="color: cyan">&lt; &gt; | * ? " %</code> charact
     )
 
     obs.obs_properties_add_button(
-        custom_names_props,
-        PN.BTN_CUSTOM_NAMES_IMPORT,
-        "Import custom names",
-        import_custom_names,
+        group_obj,
+        PN.BTN_ALIASES_IMPORT,
+        "Import aliases",
+        import_aliases_from_json_callback,
     )
 
     obs.obs_properties_add_path(
-        props=custom_names_props,
-        name=PN.PROP_CUSTOM_NAMES_EXPORT_PATH,
+        props=group_obj,
+        name=PN.PROP_ALIASES_EXPORT_PATH,
         description="",
         type=obs.OBS_PATH_DIRECTORY,
         filter=None,
@@ -635,26 +816,28 @@ Path cannot contain <code style="color: cyan">&lt; &gt; | * ? " %</code> charact
     )
 
     obs.obs_properties_add_button(
-        custom_names_props,
-        PN.BTN_CUSTOM_NAMES_EXPORT,
-        "Export custom names",
-        export_custom_names,
+        group_obj,
+        PN.BTN_ALIASES_EXPORT,
+        "Export aliases",
+        export_aliases_to_json_callback,
     )
 
-    # ------ Other ------
+    # ----- Callbacks -----
+    obs.obs_property_set_modified_callback(aliases_list, update_aliases_callback)
+
+
+def setup_other_settings(group_obj):
     obs.obs_properties_add_text(
-        props=other_props,
+        props=group_obj,
         name=PN.TXT_RESTART_BUFFER_LOOP,
-        description="""If you don't restart replay buffering for a long time, saving clips can take a very long time and other bugs can happen (thanks, OBS).
-It is recommended to keep the value within 1-2 hours (3600-7200 seconds).
-Before a scheduled restart of replay buffering, script looks at the max clip length in the OBS settings and checks if keyboard or mouse input was made at that time. If input was made, the restart will be delayed for the time of max clip length, otherwise it restarts replay baffering.
-If you want to disable scheduled restart of replay buffering, set the value to 0.
-""",
+        description="""If replay buffering runs too long without a restart, saving clips may become slow, and bugs can occur (thanks, OBS).
+It's recommended to restart it every 1-2 hours (3600-7200 seconds). Before restarting, the script checks OBS's max clip length and detects keyboard or mouse input. If input is detected, the restart is delayed by the max clip length; otherwise, it proceeds immediately.
+To disable scheduled restarts, set the value to 0.""",
         type=obs.OBS_TEXT_INFO
     )
 
     obs.obs_properties_add_int(
-        props=other_props,
+        props=group_obj,
         name=PN.PROP_RESTART_BUFFER_LOOP,
         description="Restart every (s)",
         min=0, max=7200,
@@ -662,76 +845,114 @@ If you want to disable scheduled restart of replay buffering, set the value to 0
     )
 
     obs.obs_properties_add_bool(
-        props=other_props,
+        props=group_obj,
         name=PN.PROP_RESTART_BUFFER,
         description="Restart replay buffer after clip saving"
     )
 
-    obs.obs_property_set_modified_callback(base_path_prop, check_base_path_callback)
-    obs.obs_property_set_modified_callback(filename_format_prop, check_filename_template_callback)
-    obs.obs_property_set_modified_callback(notification_success_prop, update_notifications_menu_callback)
-    obs.obs_property_set_modified_callback(notification_failure_prop, update_notifications_menu_callback)
-    obs.obs_property_set_modified_callback(custom_names_list, update_custom_names_callback)
+
+def script_properties():
+    p = obs.obs_properties_create()  # main properties object
+
+    # ----- Ungrouped properties -----
+    # Updates text
+    t = obs.obs_properties_add_text(p, 'check_updates', 'New update available', obs.OBS_TEXT_INFO)
+    obs.obs_property_set_visible(t, VARIABLES.update_available)
+
+    # Like btn
+    obs.obs_properties_add_button(
+        p,
+        "like_btn",
+        "🌟 Like this script? Star it! 🌟",
+        open_github_callback
+    )
+
+    # ----- Groups -----
+    clip_path_gr = obs.obs_properties_create()
+    # video_path_gr = obs.obs_properties_create()  # todo: for future updates
+    notification_gr = obs.obs_properties_create()
+    popup_gr = obs.obs_properties_create()
+    aliases_gr = obs.obs_properties_create()
+    other_gr = obs.obs_properties_create()
+
+    obs.obs_properties_add_group(p, PN.GR_CLIPS_PATH_SETTINGS, "Clip path settings", obs.OBS_GROUP_NORMAL, clip_path_gr)
+    # obs.obs_properties_add_group(p, PN.GR_VIDEOS_PATH_SETTINGS, "Video path settings", obs.OBS_GROUP_NORMAL, video_path_gr)   # todo: for future updates
+    obs.obs_properties_add_group(p, PN.GR_SOUND_NOTIFICATION_SETTINGS, "Sound notifications", obs.OBS_GROUP_CHECKABLE, notification_gr)
+    obs.obs_properties_add_group(p, PN.GR_POPUP_NOTIFICATION_SETTINGS, "Popup notifications", obs.OBS_GROUP_CHECKABLE, popup_gr)
+    obs.obs_properties_add_group(p, PN.GR_ALIASES_SETTINGS, "Aliases", obs.OBS_GROUP_NORMAL, aliases_gr)
+    obs.obs_properties_add_group(p, PN.GR_OTHER_SETTINGS, "Other", obs.OBS_GROUP_NORMAL, other_gr)
+
+    # ------ Setup properties ------
+    setup_clip_paths_settings(clip_path_gr)
+    # setup_video_paths_settings(video_path_gr)   # todo: for future updates
+    setup_notifications_settings(notification_gr)
+    setup_popup_notification_settings(popup_gr)
+    setup_aliases_settings(aliases_gr)
+    setup_other_settings(other_gr)
+
     return p
 
 
-# OBS properties menu callbacks
+# -------------------- properties_callbacks.py --------------------
+# All UI callbacks have the same parameters:
+# p: properties object (controls the properties UI)
+# prop: property that changed
+# data: script settings
+# Usually I don't use `data`, cuz we have script_settings global variable.
 def open_github_callback(*args):
     webbrowser.open("https://github.com/qvvonk/smart_replays", 1)
 
 
-def update_custom_names_callback(p, prop, data):
+def update_aliases_callback(p, prop, data):
     """
-    Checks the list of custom names and updates custom names menu (shows / hides error texts).
-
-    :param p: properties.
-    :param prop: updated property.
-    :param data: config settings.
-    :return: True if settings window needs to be updated,  otherwise False.
+    Checks the list of aliases and updates aliases menu (shows / hides error texts).
     """
-    invalid_format_err_text = obs.obs_properties_get(p, PN.TXT_CUSTOM_NAMES_INVALID_FORMAT)
-    invalid_chars_err_text = obs.obs_properties_get(p, PN.TXT_CUSTOM_NAMES_INVALID_CHARACTERS)
-    path_exists_err_text = obs.obs_properties_get(p, PN.TXT_CUSTOM_NAMES_PATH_EXISTS)
+    invalid_format_err_text = obs.obs_properties_get(p, PN.TXT_ALIASES_INVALID_FORMAT)
+    invalid_chars_err_text = obs.obs_properties_get(p, PN.TXT_ALIASES_INVALID_CHARACTERS)
+    path_exists_err_text = obs.obs_properties_get(p, PN.TXT_ALIASES_PATH_EXISTS)
 
     settings_json: dict = json.loads(obs.obs_data_get_json(data))
     if not settings_json:
         return False
 
     try:
-        load_custom_names(settings_json)
+        load_aliases(settings_json)
         obs.obs_property_set_visible(invalid_format_err_text, False)
         obs.obs_property_set_visible(invalid_chars_err_text, False)
         obs.obs_property_set_visible(path_exists_err_text, False)
         return True
 
-    except CustomNameInvalidCharacters as e:
+    except AliasInvalidCharacters as e:
         obs.obs_property_set_visible(invalid_format_err_text, False)
         obs.obs_property_set_visible(invalid_chars_err_text, True)
         obs.obs_property_set_visible(path_exists_err_text, False)
         index = e.index
-    except CustomNameInvalidFormat as e:
+
+    except AliasInvalidFormat as e:
         obs.obs_property_set_visible(invalid_format_err_text, True)
         obs.obs_property_set_visible(invalid_chars_err_text, False)
         obs.obs_property_set_visible(path_exists_err_text, False)
         index = e.index
-    except CustomNamePathAlreadyExists as e:
+
+    except AliasPathAlreadyExists as e:
         obs.obs_property_set_visible(invalid_format_err_text, False)
         obs.obs_property_set_visible(invalid_chars_err_text, False)
         obs.obs_property_set_visible(path_exists_err_text, True)
         index = e.index
-    except CustomNameParsingError as e:
+
+    except AliasParsingError as e:
         index = e.index
 
     # If error in parsing
-    settings_json[PN.PROP_CUSTOM_NAMES_LIST].pop(index)
-    new_custom_names_array = obs.obs_data_array_create()
+    settings_json[PN.PROP_ALIASES_LIST].pop(index)
+    new_aliases_array = obs.obs_data_array_create()
 
-    for index, custom_name in enumerate(settings_json[PN.PROP_CUSTOM_NAMES_LIST]):
-        custom_name_data = obs.obs_data_create_from_json(json.dumps(custom_name))
-        obs.obs_data_array_insert(new_custom_names_array, index, custom_name_data)
+    for index, alias in enumerate(settings_json[PN.PROP_ALIASES_LIST]):
+        alias_data = obs.obs_data_create_from_json(json.dumps(alias))
+        obs.obs_data_array_insert(new_aliases_array, index, alias_data)
 
-    obs.obs_data_set_array(data, PN.PROP_CUSTOM_NAMES_LIST, new_custom_names_array)
-    obs.obs_data_array_release(new_custom_names_array)
+    obs.obs_data_set_array(data, PN.PROP_ALIASES_LIST, new_aliases_array)
+    obs.obs_data_array_release(new_aliases_array)
     return True
 
 
@@ -740,14 +961,43 @@ def check_filename_template_callback(p, prop, data):
     Checks filename template.
     If template is invalid, shows warning.
     """
-    error_text = obs.obs_properties_get(p, PN.TXT_FILENAME_FORMAT_ERR)
-    dt = datetime.now()
+    error_text = obs.obs_properties_get(p, PN.TXT_CLIPS_FILENAME_TEMPLATE_ERR)
 
     try:
-        format_filename("clipname", dt, raise_exception=True)
+        gen_filename("clipname", obs.obs_data_get_string(data, PN.PROP_CLIPS_FILENAME_TEMPLATE))
         obs.obs_property_set_visible(error_text, False)
     except:
         obs.obs_property_set_visible(error_text, True)
+    return True
+
+
+def update_links_path_prop_visibility(p, prop, data):
+    path_prop = obs.obs_properties_get(p, PN.PROP_CLIPS_LINKS_FOLDER_PATH)
+    path_warn_prop = obs.obs_properties_get(p, PN.TXT_CLIPS_LINKS_FOLDER_PATH_WARNING)
+    is_visible = obs.obs_data_get_bool(data, obs.obs_property_name(prop))
+
+    obs.obs_property_set_visible(path_prop, is_visible)
+    obs.obs_property_set_visible(path_warn_prop, is_visible)
+    return True
+
+
+def check_clips_links_folder_path_callback(p, prop, data):
+    """
+    Checks clips links folder path is in the same disk as OBS recordings path.
+    If it's not - sets OBS records path as base path for clips + '_links' and shows warning.
+    """
+    warn_text = obs.obs_properties_get(p, PN.TXT_CLIPS_LINKS_FOLDER_PATH_WARNING)
+
+    obs_records_path = Path(get_base_path())
+    curr_path = Path(obs.obs_data_get_string(data, PN.PROP_CLIPS_LINKS_FOLDER_PATH))
+
+    if not len(curr_path.parts) or obs_records_path.parts[0] == curr_path.parts[0]:
+        obs.obs_property_text_set_info_type(warn_text, obs.OBS_TEXT_INFO_WARNING)
+    else:
+        obs.obs_property_text_set_info_type(warn_text, obs.OBS_TEXT_INFO_ERROR)
+        obs.obs_data_set_string(data,
+                                PN.PROP_CLIPS_LINKS_FOLDER_PATH,
+                                str(obs_records_path / '_links'))
     return True
 
 
@@ -756,11 +1006,11 @@ def update_notifications_menu_callback(p, prop, data):
     Updates notifications settings menu.
     If notification is enabled, shows path widget.
     """
-    success_path_prop = obs.obs_properties_get(p, PN.PROP_NOTIFICATION_ON_SUCCESS_PATH)
-    failure_path_prop = obs.obs_properties_get(p, PN.PROP_NOTIFICATION_ON_FAILURE_PATH)
+    success_path_prop = obs.obs_properties_get(p, PN.PROP_NOTIFY_CLIPS_ON_SUCCESS_PATH)
+    failure_path_prop = obs.obs_properties_get(p, PN.PROP_NOTIFY_CLIPS_ON_FAILURE_PATH)
 
-    on_success = obs.obs_data_get_bool(data, PN.PROP_NOTIFICATION_ON_SUCCESS)
-    on_failure = obs.obs_data_get_bool(data, PN.PROP_NOTIFICATION_ON_FAILURE)
+    on_success = obs.obs_data_get_bool(data, PN.PROP_NOTIFY_CLIPS_ON_SUCCESS)
+    on_failure = obs.obs_data_get_bool(data, PN.PROP_NOTIFY_CLIPS_ON_FAILURE)
 
     obs.obs_property_set_visible(success_path_prop, on_success)
     obs.obs_property_set_visible(failure_path_prop, on_failure)
@@ -770,23 +1020,27 @@ def update_notifications_menu_callback(p, prop, data):
 def check_base_path_callback(p, prop, data):
     """
     Checks base path is in the same disk as OBS recordings path.
-    If it's not - sets OBS records path as base path for clips.
+    If it's not - sets OBS records path as base path for clips and shows warning.
     """
-    warn_text = obs.obs_properties_get(p, PN.TEXT_BASE_PATH_INFO)
+    warn_text = obs.obs_properties_get(p, PN.TXT_CLIPS_BASE_PATH_WARNING)
 
-    obs_records_path = Path(get_base_path(from_obs_config=True))
-    curr_path = Path(obs.obs_data_get_string(data, PN.PROP_BASE_PATH))
+    obs_records_path = Path(get_base_path())
+    curr_path = Path(obs.obs_data_get_string(data, PN.PROP_CLIPS_BASE_PATH))
 
     if not len(curr_path.parts) or obs_records_path.parts[0] == curr_path.parts[0]:
         obs.obs_property_text_set_info_type(warn_text, obs.OBS_TEXT_INFO_WARNING)
     else:
         obs.obs_property_text_set_info_type(warn_text, obs.OBS_TEXT_INFO_ERROR)
-        obs.obs_data_set_string(data, PN.PROP_BASE_PATH, str(obs_records_path))
+        obs.obs_data_set_string(data, PN.PROP_CLIPS_BASE_PATH, str(obs_records_path))
+        print("WARN")
     return True
 
 
-def import_custom_names(*args):
-    path = obs.obs_data_get_string(script_settings, PN.PROP_CUSTOM_NAMES_IMPORT_PATH)
+def import_aliases_from_json_callback(*args):
+    """
+    Imports aliases from JSON file.
+    """
+    path = obs.obs_data_get_string(VARIABLES.script_settings, PN.PROP_ALIASES_IMPORT_PATH)
     if not path or not os.path.exists(path) or not os.path.isfile(path):
         return False
 
@@ -803,23 +1057,36 @@ def import_custom_names(*args):
         item = obs.obs_data_create_from_json(json.dumps(i))
         obs.obs_data_array_insert(arr, index, item)
 
-    obs.obs_data_set_array(script_settings, PN.PROP_CUSTOM_NAMES_LIST, arr)
+    obs.obs_data_set_array(VARIABLES.script_settings, PN.PROP_ALIASES_LIST, arr)
     return True
 
 
-def export_custom_names(*args):
-    path = obs.obs_data_get_string(script_settings, PN.PROP_CUSTOM_NAMES_EXPORT_PATH)
+def export_aliases_to_json_callback(*args):
+    """
+    Exports aliases to JSON file.
+    """
+    path = obs.obs_data_get_string(VARIABLES.script_settings, PN.PROP_ALIASES_EXPORT_PATH)
     if not path or not os.path.exists(path) or not os.path.isdir(path):
         return False
 
-    custom_names_dict = json.loads(obs.obs_data_get_last_json(script_settings))
-    custom_names_dict = custom_names_dict.get(PN.PROP_CUSTOM_NAMES_LIST) or DEFAULT_CUSTOM_NAMES
+    aliases_dict = json.loads(obs.obs_data_get_last_json(VARIABLES.script_settings))
+    aliases_dict = aliases_dict.get(PN.PROP_ALIASES_LIST) or CONSTANTS.DEFAULT_ALIASES
 
-    with open(os.path.join(path, "obs_smartreplays_sutom_names.json"), "w") as f:
-        f.write(json.dumps(custom_names_dict, ensure_ascii=False))
+    with open(os.path.join(path, "obs_smart_replays_aliases.json"), "w", encoding="utf-8") as f:
+        f.write(json.dumps(aliases_dict, ensure_ascii=False))
 
 
-# Windows functions
+# -------------------- tech.py --------------------
+class LASTINPUTINFO(ctypes.Structure):
+    _fields_ = [("cbSize", wintypes.UINT),
+                ("dwTime", wintypes.DWORD)]
+
+
+def _print(*values, sep: str | None = None, end: str | None = None, file=None, flush: bool = False):
+    str_time = datetime.now().strftime(f"%d.%m.%Y %H:%M:%S")
+    print(f"[{str_time}]", *values, sep=sep, end=end, file=file, flush=flush)
+
+
 def get_active_window_pid() -> int | None:
     """
     Gets process ID of the current active window.
@@ -830,7 +1097,7 @@ def get_active_window_pid() -> int | None:
     return pid.value
 
 
-def get_executable_path(pid) -> str:
+def get_executable_path(pid: int) -> Path:
     """
     Gets path of process's executable.
 
@@ -847,24 +1114,22 @@ def get_executable_path(pid) -> str:
     result = ctypes.windll.psapi.GetModuleFileNameExW(process_handle, None, filename_buffer, 260)
     ctypes.windll.kernel32.CloseHandle(process_handle)
     if result:
-        return filename_buffer.value
+        return Path(filename_buffer.value)
     else:
         raise RuntimeError(f"Cannot get executable path for process {pid}.")
 
 
-def play_sound(path: str):
+def play_sound(path: str | Path):
     """
     Plays sound using windows engine.
 
     :param path: path to sound (.wav)
     """
-    try:
-        winsound.PlaySound(path, winsound.SND_ASYNC)
-    except:
-        pass
+    with suppress(Exception):
+        winsound.PlaySound(str(path), winsound.SND_ASYNC)
 
 
-def get_time_since_last_input() -> float:
+def get_time_since_last_input() -> int:
     """
     Gets the time (in seconds) since the last mouse or keyboard input.
     """
@@ -874,12 +1139,24 @@ def get_time_since_last_input() -> float:
     if ctypes.windll.user32.GetLastInputInfo(ctypes.byref(last_input_info)):
         current_time = ctypes.windll.kernel32.GetTickCount()
         idle_time_ms = current_time - last_input_info.dwTime
-        return idle_time_ms / 1000.0
-    else:
-        return 0
+        return idle_time_ms // 1000
+    return 0
 
 
-# OBS related functions
+def create_hard_link(file_path: Path | str, links_folder: Path | str) -> None:
+    """
+    Creates a hard link for `file_path`.
+
+    :param file_path: Original file path.
+    :param links_folder: Folder where the link will be created.
+    """
+    link_path = Path(links_folder) / Path(file_path).name
+
+    os.makedirs(str(links_folder), exist_ok=True)
+    os.link(str(file_path), link_path)
+
+
+# -------------------- obs_related.py --------------------
 def get_obs_config(section_name: str | None = None,
                    param_name: str | None = None,
                    value_type: type[str, int, bool, float] = str,
@@ -899,11 +1176,10 @@ def get_obs_config(section_name: str | None = None,
     elif config_type is ConfigTypes.APP:
         cfg = obs.obs_frontend_get_global_config()
     else:
-        if OBS_VERSION[0] < 31:
+        if CONSTANTS.OBS_VERSION[0] < 31:
             cfg = obs.obs_frontend_get_global_config()
         else:
             cfg = obs.obs_frontend_get_user_config()
-
 
     if not section_name or not param_name:
         return cfg
@@ -923,13 +1199,13 @@ def get_obs_config(section_name: str | None = None,
 
 def get_last_replay_file_name() -> str:
     """
-    Gets the last saved buffer file name.
+    Returns the last saved buffer file name.
     """
     replay_buffer = obs.obs_frontend_get_replay_buffer_output()
     cd = obs.calldata_create()
     proc_handler = obs.obs_output_get_proc_handler(replay_buffer)
-    obs.proc_handler_call(proc_handler, "get_last_replay", cd)
-    path = obs.calldata_string(cd, "path")
+    obs.proc_handler_call(proc_handler, 'get_last_replay', cd)
+    path = obs.calldata_string(cd, 'path')
     obs.calldata_destroy(cd)
     obs.obs_output_release(replay_buffer)
     return path
@@ -937,7 +1213,7 @@ def get_last_replay_file_name() -> str:
 
 def get_current_scene_name() -> str:
     """
-    Gets the current OBS scene name.
+    Returns the current OBS scene name.
     """
     current_scene = obs.obs_frontend_get_current_scene()
     name = obs.obs_source_get_name(current_scene)
@@ -945,243 +1221,42 @@ def get_current_scene_name() -> str:
     return name
 
 
-def get_base_path(from_obs_config: bool = False) -> str:
-    """
-    Gets current base path for clips.
-    """
-    if not from_obs_config:
-        script_path = obs.obs_data_get_string(script_settings, PN.PROP_BASE_PATH)
-        if script_path:
-            return script_path
-
-    config_mode = get_obs_config("Output", "Mode")
-    if config_mode == "Simple":
-        return get_obs_config("SimpleOutput", "FilePath")
-    else:
-        return get_obs_config("AdvOut", "RecFilePath")
-
-
 def get_replay_buffer_max_time() -> int:
+    """
+    Returns replay buffer max time from OBS config (in seconds).
+    """
     config_mode = get_obs_config("Output", "Mode")
     if config_mode == "Simple":
-        return get_obs_config("SimpleOutput", "RecRBTime", value_type=int)
+        return get_obs_config("SimpleOutput", "RecRBTime", int)
     else:
-        return get_obs_config("AdvOut", "RecRBTime", value_type=int)
+        return get_obs_config("AdvOut", "RecRBTime", int)
 
 
-# Script helper functions
-def add_duplicate_suffix(path: str | Path) -> Path:
+def get_base_path(script_settings: Any | None = None) -> Path:
     """
-    Adds "(n)" to the end of the file name if the passed file already exists.
-    If "FILE_NAME (n)" also exists - increments n.
+    Returns the base path for clips, either from the script settings or OBS config.
 
-    :param path: path to file.
-    :return: updated path.
+    :param script_settings: Script config. If not provided, base path returns from OBS config.
+    :return: The base path as a `Path` object.
     """
-    if isinstance(path, Path):
-        path = str(path)
+    if script_settings is not None:
+        script_path = obs.obs_data_get_string(script_settings, PN.PROP_CLIPS_BASE_PATH)
+        # If PN.PROP_CLIPS_BASE_PATH is not saved in the script config, then it has a default value,
+        # which is the value from the OBS config.
+        if script_path:
+            return Path(script_path)
 
-    filename, ext = os.path.splitext(path)
-    num = 1
-    while os.path.exists(path):
-        path = filename + f" ({num})" + ext
-        num += 1
-
-    return Path(path)
-
-
-def notify(success: bool, clip_path: str):
-    """
-    Plays and shows success / failure notification if it's enabled in notifications settings.
-    """
-    sound_notifications = obs.obs_data_get_bool(script_settings, PN.GR_NOTIFICATIONS)
-    popup_notifications = obs.obs_data_get_bool(script_settings, PN.GR_POPUP)
-    popup_path_type = obs.obs_data_get_int(script_settings, PN.PROP_POPUP_PATH_TYPE)
-    python_exe = os.path.join(get_obs_config("Python", "Path64bit", str, ConfigTypes.USER), "pythonw.exe")
-
-    if success:
-        if sound_notifications and obs.obs_data_get_bool(script_settings, PN.PROP_NOTIFICATION_ON_SUCCESS):
-            path = obs.obs_data_get_string(script_settings, PN.PROP_NOTIFICATION_ON_SUCCESS_PATH)
-            play_sound(path)
-
-        if popup_notifications and obs.obs_data_get_bool(script_settings, PN.PROP_POPUP_ON_SUCCESS):
-            display_path = clip_path
-            if popup_path_type == 2:
-                display_path = Path(*Path(display_path).parts[-2:])
-            elif popup_path_type == 3:
-                display_path = Path(display_path).parts[-2]
-            elif popup_path_type == 4:
-                display_path = Path(display_path).parts[-1]
-            subprocess.Popen([python_exe, __file__, "Clip saved", f"Clip saved to {display_path}"])
+    config_mode = get_obs_config("Output", "Mode")
+    if config_mode == "Simple":
+        return Path(get_obs_config("SimpleOutput", "FilePath"))
     else:
-        if sound_notifications and obs.obs_data_get_bool(script_settings, PN.PROP_NOTIFICATION_ON_FAILURE):
-            path = obs.obs_data_get_string(script_settings, PN.PROP_NOTIFICATION_ON_FAILURE_PATH)
-            play_sound(path)
-
-        if popup_notifications and obs.obs_data_get_bool(script_settings, PN.PROP_POPUP_ON_FAILURE):
-            subprocess.Popen([python_exe, __file__, "Clip not saved", f"More in the logs.", "#C00000"])
-
-
-def load_custom_names(data_dict: dict):
-    """
-    Loads custom names to global custom_name variable.
-    Raises exception if path or name are invalid.
-
-    :param data_dict: Script settings as dict.
-    """
-    _print("Loading custom names...")
-
-    global custom_names
-    new_custom_names = {}
-    custom_names_list = data_dict.get(PN.PROP_CUSTOM_NAMES_LIST)
-    if custom_names_list is None:
-        custom_names_list = DEFAULT_CUSTOM_NAMES
-
-    for index, i in enumerate(custom_names_list):
-        value = i.get("value")
-        spl = value.split(">", 1)
-        try:
-            path, name = spl[0].strip(), spl[1].strip()
-        except IndexError:
-            raise CustomNameInvalidFormat(index)
-
-        path = os.path.expandvars(path)
-        if any(i in path for i in PATH_PROHIBITED_CHARS) or any(i in name for i in NAME_PROHIBITED_CHARS):
-            raise CustomNameInvalidCharacters(index)
-
-        if Path(path) in new_custom_names.keys():
-            raise CustomNamePathAlreadyExists(index)
-
-        new_custom_names[Path(path)] = name
-
-    custom_names = new_custom_names
-    _print(f"{len(custom_names)} custom names are loaded.")
-
-
-def append_exe_history():
-    pid = get_active_window_pid()
-    try:
-        exe = get_executable_path(pid)
-    except:
-        return
-
-    if exe_history is not None:
-        exe_history.appendleft(Path(exe))
-        # _print(f"{exe} added to exe history.")
-
-
-# Clip filename generation
-def gen_clip_name(mode: int) -> str:
-    """
-    Generates clip name based on script settings.
-    It's NOT generates new path for clip.
-    """
-    _print("Generating clip name...")
-    mode = obs.obs_data_get_int(script_settings, PN.PROP_FILENAME_CONDITION) if not mode else mode
-
-    if mode in [1, 2]:
-        if mode == 1:
-            _print("Clip file name depends on the name of an active app (.exe file name) at the moment of clip saving.")
-            pid = get_active_window_pid()
-            executable_path = get_executable_path(pid)
-            executable_path_obj = pathlib.Path(executable_path)
-            _print(f"Current active window process ID: {pid}")
-            _print(f"Current active window executable: {executable_path}")
-
-        else:  # if mode == 2
-            _print("Clip file name depends on the name of an app (.exe file name) "
-                   "that was active most of the time during the clip recording.")
-            if exe_history:
-                executable_path = max(exe_history, key=exe_history.count)
-                executable_path_obj = pathlib.Path(executable_path)
-
-
-        if clip_name := get_name_from_custom_names(executable_path):
-            return clip_name
-        else:
-            _print(f"{executable_path} or its parents weren't found in custom names list. "
-                   f"Assigning the name of the executable: {executable_path_obj.stem}")
-            return executable_path_obj.stem
-
-    elif mode == 3:
-        _print("Clip filename depends on the name of the current scene name.")
-        return get_current_scene_name()
-
-
-def get_name_from_custom_names(executable_path: str) -> str | None:
-    """
-    Searches for the passed path or its parents in the custom names list.
-    Returns None if nothing wasn't found.
-
-    :param executable_path: Path to executable.
-    """
-    _print(f"Looking for {executable_path} in custom names ...")
-
-    executable_path = Path(executable_path)
-    last_result = None
-    for i in custom_names:
-        if last_result is None and any([executable_path == i, i in executable_path.parents]):
-            last_result = i
-            continue
-
-        if last_result in i.parents:
-            last_result = i
-
-    if last_result is None:
-        _print(f"{executable_path} or its parents are not in custom names.")
-        return None
-
-    _print(f"{executable_path} or its parent was found on the list: {last_result} > {custom_names[last_result]}.")
-    return custom_names[last_result]
-
-
-def format_filename(clip_name: str, dt: datetime | None = None,
-                    force_default_template: bool = False, raise_exception: bool = False) -> str:
-    """
-    Formats the clip file name based on the template.
-    If the template is invalid, uses the default template.
-
-    :param clip_name: clip name.
-    :param dt: datetime obj.
-    :param force_default_template: use the default template even if the template in the settings is valid.
-    :param raise_exception: raise exception if template is invalid instead of using default template.
-    """
-    if dt is None:
-        dt = datetime.now()
-
-    template = obs.obs_data_get_string(script_settings, PN.PROP_FILENAME_FORMAT)
-
-    if not template:
-        if raise_exception:
-            raise ValueError
-        template = DEFAULT_FILENAME_FORMAT
-
-    if force_default_template:
-        template = DEFAULT_FILENAME_FORMAT
-
-    filename = template.replace("%NAME", clip_name)
-
-    try:
-        filename = dt.strftime(filename)
-    except:
-        _print("An error occurred while formatting filename.")
-        _print(traceback.format_exc())
-        if raise_exception:
-            raise ValueError
-
-        _print("Using default filename format.")
-        return format_filename(clip_name, dt, force_default_template=True)
-
-    for i in NAME_PROHIBITED_CHARS:
-        if i in filename:
-            if raise_exception:
-                raise SyntaxError
-            filename = filename.replace(i, "")
-
-    return filename
+        return Path(get_obs_config("AdvOut", "RecFilePath"))
 
 
 def restart_replay_buffering():
+    """
+    Restarts replay buffering, obviously -_-
+    """
     _print("Stopping replay buffering...")
     replay_output = obs.obs_frontend_get_replay_buffer_output()
     obs.obs_frontend_replay_buffer_stop()
@@ -1194,7 +1269,322 @@ def restart_replay_buffering():
     _print("Replay buffering started.")
 
 
+# -------------------- script_helpers.py --------------------
+def notify(success: bool, clip_path: Path, path_display_mode: PopupPathDisplayModes):
+    """
+    Plays and shows success / failure notification if it's enabled in notifications settings.
+    """
+    sound_notifications = obs.obs_data_get_bool(VARIABLES.script_settings, PN.GR_SOUND_NOTIFICATION_SETTINGS)
+    popup_notifications = obs.obs_data_get_bool(VARIABLES.script_settings, PN.GR_POPUP_NOTIFICATION_SETTINGS)
+    python_exe = os.path.join(get_obs_config("Python", "Path64bit", str, ConfigTypes.APP), "pythonw.exe")
+
+    if path_display_mode == PopupPathDisplayModes.JUST_FILE:
+        clip_path = clip_path.name
+    elif path_display_mode == PopupPathDisplayModes.JUST_FOLDER:
+        clip_path = clip_path.parent.name
+    elif path_display_mode == PopupPathDisplayModes.FOLDER_AND_FILE:
+        clip_path = Path(clip_path.parent.name) / clip_path.name
+
+    if success:
+        if sound_notifications and obs.obs_data_get_bool(VARIABLES.script_settings, PN.PROP_NOTIFY_CLIPS_ON_SUCCESS):
+            path = obs.obs_data_get_string(VARIABLES.script_settings, PN.PROP_NOTIFY_CLIPS_ON_SUCCESS_PATH)
+            play_sound(path)
+
+        if popup_notifications and obs.obs_data_get_bool(VARIABLES.script_settings, PN.PROP_POPUP_CLIPS_ON_SUCCESS):
+            subprocess.Popen([python_exe, __file__, "Clip saved", f"Clip saved to {clip_path}"])
+    else:
+        if sound_notifications and obs.obs_data_get_bool(VARIABLES.script_settings, PN.PROP_NOTIFY_CLIPS_ON_FAILURE):
+            path = obs.obs_data_get_string(VARIABLES.script_settings, PN.PROP_NOTIFY_CLIPS_ON_FAILURE_PATH)
+            play_sound(path)
+
+        if popup_notifications and obs.obs_data_get_bool(VARIABLES.script_settings, PN.PROP_POPUP_CLIPS_ON_FAILURE):
+            subprocess.Popen([python_exe, __file__, "Clip not saved", f"More in the logs.", "#C00000"])
+
+
+def load_aliases(script_settings_dict: dict):
+    """
+    Loads aliases to `VARIABLES.aliases`.
+    Raises exception if path or name are invalid.
+
+    :param script_settings_dict: Script settings as dict.
+    """
+    _print("Loading aliases...")
+
+    new_aliases = {}
+    aliases_list = script_settings_dict.get(PN.PROP_ALIASES_LIST)
+    if aliases_list is None:
+        aliases_list = CONSTANTS.DEFAULT_ALIASES
+
+    for index, i in enumerate(aliases_list):
+        value = i.get("value")
+        spl = value.split(">", 1)
+        try:
+            path, name = spl[0].strip(), spl[1].strip()
+        except IndexError:
+            raise AliasInvalidFormat(index)
+
+        path = os.path.expandvars(path)
+        if any(i in path for i in CONSTANTS.PATH_PROHIBITED_CHARS) or any(i in name for i in CONSTANTS.FILENAME_PROHIBITED_CHARS):
+            raise AliasInvalidCharacters(index)
+
+        if Path(path) in new_aliases.keys():
+            raise AliasPathAlreadyExists(index)
+
+        new_aliases[Path(path)] = name
+
+    VARIABLES.aliases = new_aliases
+    _print(f"{len(VARIABLES.aliases)} aliases are loaded.")
+
+
+# -------------------- clipname_gen.py --------------------
+def gen_clip_base_name(mode: ClipNamingModes | None = None) -> str:
+    """
+    Generates the base name of the clip based on the selected naming mode.
+    It does NOT generate a new path for the clip or filename, only its base name.
+
+    :param mode: Clip naming mode. If None, the mode is fetched from the script config.
+                 If a value is provided, it overrides the configs value.
+    :return: The base name of the clip based on the selected naming mode.
+    """
+    _print("Generating clip base name...")
+    mode = obs.obs_data_get_int(VARIABLES.script_settings, PN.PROP_CLIPS_NAMING_MODE) if mode is None else mode
+    mode = ClipNamingModes(mode)
+
+    if mode in [ClipNamingModes.CURRENT_PROCESS, ClipNamingModes.MOST_RECORDED_PROCESS]:
+        if mode is ClipNamingModes.CURRENT_PROCESS:
+            _print("Clip file name depends on the name of an active app (.exe file name) at the moment of clip saving.")
+            pid = get_active_window_pid()
+            executable_path = get_executable_path(pid)
+            _print(f"Current active window process ID: {pid}")
+            _print(f"Current active window executable: {executable_path}")
+
+        else:
+            _print("Clip file name depends on the name of an app (.exe file name) "
+                   "that was active most of the time during the clip recording.")
+            if VARIABLES.clip_exe_history:
+                executable_path = max(VARIABLES.clip_exe_history, key=VARIABLES.clip_exe_history.count)
+            else:
+                executable_path = get_executable_path(get_active_window_pid())
+
+        _print(f'Searching for {executable_path} in aliases list...')
+        if alias := get_alias(executable_path, VARIABLES.aliases):
+            _print(f'Alias found: {alias}.')
+            return alias
+        else:
+            _print(f"{executable_path} or its parents weren't found in aliases list. "
+                   f"Assigning the name of the executable: {executable_path.stem}")
+            return executable_path.stem
+
+    else:
+        _print("Clip filename depends on the name of the current scene name.")
+        return get_current_scene_name()
+
+
+def get_alias(executable_path: str | Path, aliases_dict: dict[Path, str]) -> str | None:
+    """
+    Retrieves an alias for the given executable path from the provided dictionary.
+
+    The function first checks if the exact `executable_path` exists in `aliases_dict`.
+    If not, it searches for the closest parent directory that is present in the dictionary.
+
+    :param executable_path: A file path or string representing the executable.
+    :param aliases_dict: A dictionary where keys are `Path` objects representing executable file paths
+                         or directories, and values are their corresponding aliases.
+    :return: The corresponding alias if found, otherwise `None`.
+    """
+    exe_path = Path(executable_path)
+    if exe_path in aliases_dict:
+        return aliases_dict[exe_path]
+
+    for parent in exe_path.parents:
+        if parent in aliases_dict:
+            return aliases_dict[parent]
+
+
+
+def gen_filename(base_name: str, template: str, dt: datetime | None = None) -> str:
+    """
+    Generates a file name based on the template.
+    If the template is invalid or formatting fails, raises ValueError.
+    If the generated name contains prohibited characters, raises SyntaxError.
+
+    :param base_name: Base name for the file.
+    :param template: Template for generating the file name.
+    :param dt: Optional datetime object; uses current time if None.
+    :return: Formatted file name.
+    """
+    if not template:
+        raise ValueError
+
+    dt = dt or datetime.now()
+    filename = template.replace("%NAME", base_name)
+
+    try:
+        filename = dt.strftime(filename)
+    except Exception as e:
+        _print(f"An error occurred while generating the file name using the template {template}.")
+        _print(traceback.format_exc())
+        raise ValueError from e
+
+    if any(i in filename for i in CONSTANTS.FILENAME_PROHIBITED_CHARS):
+        raise SyntaxError
+    return filename
+
+
+def ensure_unique_filename(file_path: str | Path) -> Path:
+    """
+    Generates a unique filename by adding a numerical suffix if the file already exists.
+
+    :param file_path: A string or Path object representing the target file.
+    :return: A unique Path object with a modified name if necessary.
+    """
+    file_path = Path(file_path)
+    parent, stem, suffix = file_path.parent, file_path.stem, file_path.suffix
+    counter = 1
+
+    while file_path.exists():
+        file_path = parent / f"{stem} ({counter}){suffix}"
+        counter += 1
+
+    return file_path
+
+
+# -------------------- save_buffer.py --------------------
+def move_clip_file(mode: ClipNamingModes | None = None) -> tuple[str, Path]:
+    old_file_path = get_last_replay_file_name()
+    _print(f"Old clip file path: {old_file_path}")
+
+    clip_name = gen_clip_base_name(mode)
+    ext = old_file_path.split(".")[-1]
+    filename_template = obs.obs_data_get_string(VARIABLES.script_settings,
+                                                PN.PROP_CLIPS_FILENAME_TEMPLATE)
+    filename = gen_filename(clip_name, filename_template) + f".{ext}"
+
+    new_folder = Path(get_base_path(script_settings=VARIABLES.script_settings))
+    if obs.obs_data_get_bool(VARIABLES.script_settings, PN.PROP_CLIPS_SAVE_TO_FOLDER):
+        new_folder = new_folder / clip_name
+
+    os.makedirs(str(new_folder), exist_ok=True)
+    new_path = new_folder / filename
+    new_path = ensure_unique_filename(new_path)
+    _print(f"New clip file path: {new_path}")
+
+    os.rename(old_file_path, str(new_path))
+    _print("Clip file successfully moved.")
+
+    if obs.obs_data_get_bool(VARIABLES.script_settings, PN.PROP_CLIPS_CREATE_LINKS):
+        links_folder = obs.obs_data_get_string(VARIABLES.script_settings, PN.PROP_CLIPS_LINKS_FOLDER_PATH)
+        create_hard_link(new_path, links_folder)
+    return clip_name, new_path
+
+
+def save_buffer_with_force_mode(mode: ClipNamingModes):
+    """
+    Sends a request to save the replay buffer and setting a specific clip naming mode.
+    Can only be called using hotkeys.
+    """
+    if not obs.obs_frontend_replay_buffer_active():
+        return
+
+    if CONSTANTS.CLIPS_FORCE_MODE_LOCK.locked():
+        return
+
+    CONSTANTS.CLIPS_FORCE_MODE_LOCK.acquire()
+    VARIABLES.force_mode = mode
+    obs.obs_frontend_replay_buffer_save()
+
+
+# -------------------- obs_events_callbacks.py --------------------
+def on_buffer_recording_started_callback(event):
+    """
+    Resets and starts recording executables history.
+    Starts replay buffer auto restart loop.
+    """
+    if event is not obs.OBS_FRONTEND_EVENT_REPLAY_BUFFER_STARTED:
+        return
+
+    # Reset and restart exe history
+    VARIABLES.clip_exe_history = deque([], maxlen=get_replay_buffer_max_time())
+    _print(f"Exe history deque created. Maxlen={VARIABLES.clip_exe_history.maxlen}.")
+    obs.timer_add(append_clip_exe_history, 1000)
+
+    # Start replay buffer auto restart loop.
+    if restart_loop_time := obs.obs_data_get_int(VARIABLES.script_settings, PN.PROP_RESTART_BUFFER_LOOP):
+        obs.timer_add(restart_replay_buffering_callback, restart_loop_time * 1000)
+
+
+def on_buffer_recording_stopped_callback(event):
+    """
+    Stops recording executables history.
+    Stops replay buffer auto restart loop.
+    """
+    if event is not obs.OBS_FRONTEND_EVENT_REPLAY_BUFFER_STOPPED:
+        return
+
+    obs.timer_remove(append_clip_exe_history)
+    obs.timer_remove(restart_replay_buffering_callback)
+    VARIABLES.clip_exe_history.clear()
+
+
+def on_buffer_save_callback(event):
+    if event is not obs.OBS_FRONTEND_EVENT_REPLAY_BUFFER_SAVED:
+        return
+
+    path_display_type = obs.obs_data_get_int(VARIABLES.script_settings,
+                                             PN.PROP_POPUP_PATH_DISPLAY_MODE)
+    path_display_type = PopupPathDisplayModes(path_display_type)
+
+    _print(f"{'SAVING BUFFER':->50}")
+
+    try:
+        clip_name, path = move_clip_file(mode=VARIABLES.force_mode)
+        if obs.obs_data_get_bool(VARIABLES.script_settings, PN.PROP_RESTART_BUFFER):
+            # IMPORTANT
+            # I don't know why, but it seems like stopping and starting replay buffering should be in the separate thread.
+            # Otherwise it can "stuck" on stopping.
+            Thread(target=restart_replay_buffering, daemon=True).start()
+
+        if VARIABLES.force_mode:
+            VARIABLES.force_mode = None
+            CONSTANTS.CLIPS_FORCE_MODE_LOCK.release()
+
+        notify(True, path, path_display_mode=path_display_type)
+    except:
+        _print("An error occurred while moving file to the new destination.")
+        _print(traceback.format_exc())
+        notify(False, Path(), path_display_mode=path_display_type)
+    _print("-" * 50)
+
+
+def on_video_recording_started_callback(event):  # todo: for future updates
+    if event is not obs.OBS_FRONTEND_EVENT_RECORDING_STARTED:
+        return
+
+    VARIABLES.video_exe_history = defaultdict(int)
+    obs.timer_add(append_video_exe_history, 1000)
+
+
+def on_video_recording_stopping_callback(event):  # todo: for future updates
+    if event is not obs.OBS_FRONTEND_EVENT_RECORDING_STOPPING:
+        return
+
+    obs.timer_remove(append_video_exe_history)
+
+
+def on_video_recording_stopped_callback(event):  # todo: for future updates
+    if event is not obs.OBS_FRONTEND_EVENT_RECORDING_STOPPED:
+        return
+
+    VARIABLES.video_exe_history = None
+
+
+# -------------------- other_callbacks.py --------------------
 def restart_replay_buffering_callback():
+    """
+    Restarts replay buffering and adds itself to obs timer.
+
+    This callback is only called by the obs timer.
+    """
     _print("Restart replay buffering callback.")
     obs.timer_remove(restart_replay_buffering_callback)
 
@@ -1210,153 +1600,115 @@ def restart_replay_buffering_callback():
 
     # IMPORTANT
     # I don't know why, but it seems like stopping and starting replay buffering should be in the separate thread.
-    # Otherwise it can "stuck" on stopping.
+    # Otherwise it can "stuck" at stopping state.
     Thread(target=restart_replay_buffering, daemon=True).start()
-
-# OBS events callbacks
-def on_buffer_save_callback(event):
-    if event is not obs.OBS_FRONTEND_EVENT_REPLAY_BUFFER_SAVED:
-        return
-
-    global force_mode
-    _print("------ SAVING BUFFER HANDLER ------")
-    try:
-        clip_name, path = save_buffer(mode=force_mode)
-        if obs.obs_data_get_bool(script_settings, PN.PROP_RESTART_BUFFER):
-            # IMPORTANT
-            # I don't know why, but it seems like stopping and starting replay buffering should be in the separate thread.
-            # Otherwise it can "stuck" on stopping.
-            Thread(target=restart_replay_buffering, daemon=True).start()
-
-        if force_mode:
-            force_mode = 0
-            FORCE_MODE_LOCK.release()
-        notify(True, str(path))
-    except:
-        _print("An error occurred while moving file to the new destination.")
-        _print(traceback.format_exc())
-        notify(False, "")
-    _print("-----------------------------------")
+    # I don't re-add this callback to timer again, cz it will be automatically added in on buffering start callback.
 
 
-def save_buffer_force_mode(mode: int):
-    if not obs.obs_frontend_replay_buffer_active():
-        return
-
-    if FORCE_MODE_LOCK.locked():
-        return
-
-    FORCE_MODE_LOCK.acquire()
-    global force_mode
-    force_mode = mode
-    obs.obs_frontend_replay_buffer_save()
-
-
-def on_buffer_recording_started_callback(event):
+def append_clip_exe_history():
     """
-    Resets and starts recording executables history.
+    Adds current active executable path in clip exe history.
     """
-    if event is not obs.OBS_FRONTEND_EVENT_REPLAY_BUFFER_STARTED:
-        return
-
-    global exe_history
-    replay_max_size = get_replay_buffer_max_time()
-    exe_history = deque([], maxlen=replay_max_size)
-    _print(f"Exe history deque created. Maxlen={exe_history.maxlen}.")
-    obs.timer_add(append_exe_history, 1000)
-
-    if restart_loop_time := obs.obs_data_get_int(script_settings, PN.PROP_RESTART_BUFFER_LOOP):
-        obs.timer_add(restart_replay_buffering_callback, restart_loop_time * 1000)
+    with suppress(Exception):
+        pid = get_active_window_pid()
+        exe = get_executable_path(pid)
+        VARIABLES.clip_exe_history.appendleft(exe)
 
 
-def on_buffer_recording_stopped_callback(event):
+def append_video_exe_history():
     """
-    Stops recording executables history.
+    Adds current active executable path in video exe history.
     """
-    if event is not obs.OBS_FRONTEND_EVENT_REPLAY_BUFFER_STOPPED:
-        return
-    obs.timer_remove(append_exe_history)
-    obs.timer_remove(restart_replay_buffering_callback)
-    exe_history.clear()
+    with suppress(Exception):
+        pid = get_active_window_pid()
+        exe = get_executable_path(pid)
+        VARIABLES.video_exe_history[exe] += 1
 
 
-def save_buffer(mode: int = 0) -> tuple[str, Path]:
-    dt = datetime.now()
+# -------------------- hotkeys.py --------------------
+def load_hotkeys():
+    keys = (
+        (PN.HK_SAVE_BUFFER_MODE_1, "[Smart Replays] Save buffer (active exe)",
+         lambda pressed: save_buffer_with_force_mode(ClipNamingModes.CURRENT_PROCESS) if pressed else None),
 
-    old_file_path = get_last_replay_file_name()
-    _print(f"Old clip file path: {old_file_path}")
+        (PN.HK_SAVE_BUFFER_MODE_2, "[Smart Replays] Save buffer (most recorded exe)",
+         lambda pressed: save_buffer_with_force_mode(ClipNamingModes.MOST_RECORDED_PROCESS) if pressed else None),
 
-    clip_name = gen_clip_name(mode)
-    ext = old_file_path.split(".")[-1]
-    filename = format_filename(clip_name, dt) + f".{ext}"
+        (PN.HK_SAVE_BUFFER_MODE_3, "[Smart Replays] Save buffer (active scene)",
+         lambda pressed: save_buffer_with_force_mode(ClipNamingModes.CURRENT_SCENE) if pressed else None)
+    )
 
-    new_folder = Path(get_base_path())
-    if obs.obs_data_get_bool(script_settings, PN.PROP_SAVE_TO_FOLDER):
-        new_folder = new_folder.joinpath(clip_name)
-
-    os.makedirs(str(new_folder), exist_ok=True)
-    new_path = new_folder.joinpath(filename)
-    new_path = add_duplicate_suffix(new_path)
-    _print(f"New clip file path: {new_path}")
-
-    os.rename(old_file_path, str(new_path))
-    _print("Clip file successfully moved.")
-    return clip_name, new_path
+    for key_name, key_desc, key_callback in keys:
+        key_id = obs.obs_hotkey_register_frontend(key_name, key_desc, key_callback)
+        VARIABLES.hotkey_ids.update({key_name: key_id})
+        key_data = obs.obs_data_get_array(VARIABLES.script_settings, key_name)
+        obs.obs_hotkey_load(key_id, key_data)
+        obs.obs_data_array_release(key_data)
 
 
-# Functions imported by OBS
+# -------------------- obs_script_other.py --------------------
 def script_defaults(s):
     _print("Loading default values...")
-    obs.obs_data_set_default_string(s, PN.PROP_BASE_PATH, get_obs_config("SimpleOutput", "FilePath"))
-    obs.obs_data_set_default_int(s, PN.PROP_FILENAME_CONDITION, 1)
-    obs.obs_data_set_default_string(s, PN.PROP_FILENAME_FORMAT, DEFAULT_FILENAME_FORMAT)
-    obs.obs_data_set_default_bool(s, PN.PROP_SAVE_TO_FOLDER, True)
-    obs.obs_data_set_default_bool(s, PN.PROP_NOTIFICATION_ON_SUCCESS, False)
-    obs.obs_data_set_default_bool(s, PN.PROP_NOTIFICATION_ON_FAILURE, False)
-    obs.obs_data_set_default_bool(s, PN.PROP_POPUP_ON_SUCCESS, False)
-    obs.obs_data_set_default_bool(s, PN.PROP_POPUP_ON_FAILURE, False)
-    obs.obs_data_set_default_int(s, PN.PROP_POPUP_PATH_TYPE, 1)
+    obs.obs_data_set_default_string(s, PN.PROP_CLIPS_BASE_PATH, str(get_base_path()))
+    obs.obs_data_set_default_int(s, PN.PROP_CLIPS_NAMING_MODE, ClipNamingModes.CURRENT_PROCESS.value)
+    obs.obs_data_set_default_string(s, PN.PROP_CLIPS_FILENAME_TEMPLATE, CONSTANTS.DEFAULT_FILENAME_FORMAT)
+    obs.obs_data_set_default_bool(s, PN.PROP_CLIPS_SAVE_TO_FOLDER, True)
+    obs.obs_data_set_default_string(s, PN.PROP_CLIPS_LINKS_FOLDER_PATH, str(get_base_path() / '_links'))
+
+    # obs.obs_data_set_default_int(s, PN.PROP_VIDEOS_NAMING_MODE, VideoNamingModes.MOST_RECORDED_PROCESS.value)
+    # obs.obs_data_set_default_string(s, PN.PROP_VIDEOS_FILENAME_FORMAT, CONSTANTS.DEFAULT_FILENAME_FORMAT)
+    # obs.obs_data_set_default_bool(s, PN.PROP_VIDEOS_SAVE_TO_FOLDER, True)
+
+    obs.obs_data_set_default_bool(s, PN.PROP_NOTIFY_CLIPS_ON_SUCCESS, False)
+    obs.obs_data_set_default_bool(s, PN.PROP_NOTIFY_CLIPS_ON_FAILURE, False)
+    obs.obs_data_set_default_bool(s, PN.PROP_POPUP_CLIPS_ON_SUCCESS, False)
+    obs.obs_data_set_default_bool(s, PN.PROP_POPUP_CLIPS_ON_FAILURE, False)
+    obs.obs_data_set_default_int(s, PN.PROP_POPUP_PATH_DISPLAY_MODE, PopupPathDisplayModes.FULL_PATH.value)
+
     obs.obs_data_set_default_int(s, PN.PROP_RESTART_BUFFER_LOOP, 3600)
     obs.obs_data_set_default_bool(s, PN.PROP_RESTART_BUFFER, True)
 
     arr = obs.obs_data_array_create()
-    for index, i in enumerate(DEFAULT_CUSTOM_NAMES):
+    for index, i in enumerate(CONSTANTS.DEFAULT_ALIASES):
         data = obs.obs_data_create_from_json(json.dumps(i))
         obs.obs_data_array_insert(arr, index, data)
 
-    obs.obs_data_set_default_array( s, PN.PROP_CUSTOM_NAMES_LIST, arr )
+    obs.obs_data_set_default_array(s, PN.PROP_ALIASES_LIST, arr)
     _print("The default values are set.")
 
 
 def script_update(settings):
     _print("Updating script...")
 
-    global script_settings
-    script_settings = settings
-    _print(obs.obs_data_get_json(script_settings))
+    VARIABLES.script_settings = settings
+    _print(obs.obs_data_get_json(VARIABLES.script_settings))
     _print("Script updated")
 
 
 def script_save(settings):
     _print("Saving script...")
 
-    for key_name in hotkey_ids:
-        k = obs.obs_hotkey_save(hotkey_ids[key_name])
+    for key_name in VARIABLES.hotkey_ids:
+        k = obs.obs_hotkey_save(VARIABLES.hotkey_ids[key_name])
         obs.obs_data_set_array(settings, key_name, k)
     _print("Script saved")
 
 
-def script_load(data):
+def script_load(script_settings):
     _print("Loading script...")
-    global script_settings
-    script_settings = data
+    VARIABLES.script_settings = script_settings
+    # VARIABLES.update_available = check_updates(CONSTANTS.VERSION)  # todo: for future updates
 
-    json_settings = json.loads(obs.obs_data_get_json(data))
-    load_custom_names(json_settings)
+    json_settings = json.loads(obs.obs_data_get_json(script_settings))
+    load_aliases(json_settings)
 
     obs.obs_frontend_add_event_callback(on_buffer_save_callback)
     obs.obs_frontend_add_event_callback(on_buffer_recording_started_callback)
     obs.obs_frontend_add_event_callback(on_buffer_recording_stopped_callback)
+
+    # obs.obs_frontend_add_event_callback(on_video_recording_started_callback)  # todo: for future updates
+    # obs.obs_frontend_add_event_callback(on_video_recording_stopping_callback)  # todo: for future updates
+    # obs.obs_frontend_add_event_callback(on_video_recording_stopped_callback)  # todo: for future updates
     load_hotkeys()
 
     if obs.obs_frontend_replay_buffer_active():
@@ -1365,42 +1717,8 @@ def script_load(data):
     _print("Script loaded.")
 
 
-def sbfm1(pressed):
-    return save_buffer_force_mode(1) if pressed else None
-
-
-def sbfm2(pressed):
-    return save_buffer_force_mode(2) if pressed else None
-
-
-def sbfm3(pressed):
-    return save_buffer_force_mode(3) if pressed else None
-
-def load_hotkeys():
-    hk1_id = obs.obs_hotkey_register_frontend(PN.HK_SAVE_BUFFER_MODE_1,
-                                              "[Smart Replays] Save buffer (force mode 1)",
-                                              sbfm1)
-
-    hk2_id = obs.obs_hotkey_register_frontend(PN.HK_SAVE_BUFFER_MODE_2,
-                                              "[Smart Replays] Save buffer (force mode 2)",
-                                              sbfm2)
-
-    hk3_id = obs.obs_hotkey_register_frontend(PN.HK_SAVE_BUFFER_MODE_2,
-                                              "[Smart Replays] Save buffer (force mode 3)",
-                                              sbfm3)
-
-    hotkey_ids.update({PN.HK_SAVE_BUFFER_MODE_1: hk1_id,
-                       PN.HK_SAVE_BUFFER_MODE_2: hk2_id,
-                       PN.HK_SAVE_BUFFER_MODE_3: hk3_id})
-
-    for key_name in hotkey_ids:
-        key_data = obs.obs_data_get_array(script_settings, key_name)
-        obs.obs_hotkey_load(hotkey_ids[key_name], key_data)
-        obs.obs_data_array_release(key_data)
-
-
 def script_unload():
-    obs.timer_remove(append_exe_history)
+    obs.timer_remove(append_clip_exe_history)
     obs.timer_remove(restart_replay_buffering_callback)
 
     _print("Script unloaded.")
@@ -1417,7 +1735,7 @@ Smart Replays is an OBS script whose main purpose is to save clips with differen
 </div>
 
 <div style="font-size: 10pt; text-align: left; margin-top: 20px;">
-Version: {VERSION}<br/>
+Version: {CONSTANTS.VERSION}<br/>
 Developed by: Qvvonk<br/>
 </div>
 """
