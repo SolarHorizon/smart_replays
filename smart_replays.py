@@ -206,7 +206,7 @@ user32 = ctypes.windll.user32
 
 
 class CONSTANTS:
-    VERSION = "1.0.8"
+    VERSION = "1.0.8.1"
     OBS_VERSION_STRING = obs.obs_get_version_string()
     OBS_VERSION_RE = re.compile(r'(\d+)\.(\d+)\.(\d+)')
     OBS_VERSION = [int(i) for i in OBS_VERSION_RE.match(OBS_VERSION_STRING).groups()]
@@ -1276,7 +1276,7 @@ def notify(success: bool, clip_path: Path, path_display_mode: PopupPathDisplayMo
     """
     sound_notifications = obs.obs_data_get_bool(VARIABLES.script_settings, PN.GR_SOUND_NOTIFICATION_SETTINGS)
     popup_notifications = obs.obs_data_get_bool(VARIABLES.script_settings, PN.GR_POPUP_NOTIFICATION_SETTINGS)
-    python_exe = os.path.join(get_obs_config("Python", "Path64bit", str, ConfigTypes.APP), "pythonw.exe")
+    python_exe = os.path.join(get_obs_config("Python", "Path64bit", str, ConfigTypes.USER), "pythonw.exe")
 
     if path_display_mode == PopupPathDisplayModes.JUST_FILE:
         clip_path = clip_path.name

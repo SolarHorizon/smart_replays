@@ -31,7 +31,7 @@ def notify(success: bool, clip_path: Path, path_display_mode: PopupPathDisplayMo
     """
     sound_notifications = obs.obs_data_get_bool(VARIABLES.script_settings, PN.GR_SOUND_NOTIFICATION_SETTINGS)
     popup_notifications = obs.obs_data_get_bool(VARIABLES.script_settings, PN.GR_POPUP_NOTIFICATION_SETTINGS)
-    python_exe = os.path.join(get_obs_config("Python", "Path64bit", str, ConfigTypes.APP), "pythonw.exe")
+    python_exe = os.path.join(get_obs_config("Python", "Path64bit", str, ConfigTypes.USER), "pythonw.exe")
 
     if path_display_mode == PopupPathDisplayModes.JUST_FILE:
         clip_path = clip_path.name
