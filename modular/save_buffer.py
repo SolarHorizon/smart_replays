@@ -43,6 +43,7 @@ def move_clip_file(mode: ClipNamingModes | None = None) -> tuple[str, Path]:
 
     os.rename(old_file_path, str(new_path))
     _print("Clip file successfully moved.")
+    os.utime(new_folder)
 
     if obs.obs_data_get_bool(VARIABLES.script_settings, PN.PROP_CLIPS_CREATE_LINKS):
         links_folder = obs.obs_data_get_string(VARIABLES.script_settings, PN.PROP_CLIPS_LINKS_FOLDER_PATH)
