@@ -1077,6 +1077,10 @@ def export_aliases_to_json_callback(*args):
 
 
 # -------------------- tech.py --------------------
+GetTickCount64 = ctypes.windll.kernel32.GetTickCount64
+GetTickCount64.restype = ctypes.c_ulonglong
+
+
 class LASTINPUTINFO(ctypes.Structure):
     _fields_ = [("cbSize", wintypes.UINT),
                 ("dwTime", wintypes.DWORD)]
@@ -1137,7 +1141,7 @@ def get_time_since_last_input() -> int:
     last_input_info.cbSize = ctypes.sizeof(LASTINPUTINFO)
 
     if ctypes.windll.user32.GetLastInputInfo(ctypes.byref(last_input_info)):
-        current_time = ctypes.windll.kernel32.GetTickCount()
+        current_time = GetTickCount64()
         idle_time_ms = current_time - last_input_info.dwTime
         return idle_time_ms // 1000
     return 0
